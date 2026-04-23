@@ -1,18 +1,84 @@
-# :crystal_ball: ct_protocol_summary
-Converts CT protocol data from HTML files into an Excel spreadsheet for improved readability and ease of data manipulation.
+# CT Protocol Comparison
 
-> [!IMPORTANT]
-> Please refer to the `requirements.txt` file for the list of required packages.
+A **Python tool** for working with **CT protocol HTML exports**.
+
+It supports two workflows:
+
+- **Extract mode**: convert **one HTML file** into a structured **Excel summary**
+- **Compare mode**: compare **two HTML files** (**BEFORE** and **AFTER**) and generate:
+  - a **comparison report**
+  - a highlighted **BEFORE** spreadsheet
+  - a highlighted **AFTER** spreadsheet
+
+The aim is to make CT protocol data **easier to read, filter, review, and compare** than in the original HTML format.
+
+---
+
+## Features
+
+- Parses **protocol**, **acquisition**, and **result** sections from CT protocol HTML files
+- Converts extracted data into a structured **Excel spreadsheet**
+- Supports **single-file extraction**
+- Supports **two-file comparison**
+- Detects:
+  - **removed rows**
+  - **added rows**
+  - **changed parameter values**
+  - **new parameter headers** that appear only in one file
+- Produces **colour-highlighted Excel outputs** for visual review
+- Automatically **adjusts Excel column widths**
+- Uses a simple **Tkinter pop-up interface** for file selection
+
+---
+
+## Requirements
+
+Please install the packages listed in `requirements.txt`.
+
+The script currently uses:
+
+- `pandas`
+- `beautifulsoup4`
+- `openpyxl`
+- `tkinter` *(usually included with standard Python installations)*
+- `os` *(standard library)*
+
+---
+
+## How It Works
+
+The script reads CT protocol HTML content and extracts data from:
+
+- **protocol headings**
+- **acquisition labels**
+- **result labels**
+- **parameter / value tables**
+
+Each extracted row is stored with the following **identifier columns**:
+
+- `Protocol`
+- `Acquisition Number`
+- `Label`
+- `Type`
+- `Result Label`
+
+These columns are used as a **composite key** to identify matching rows when comparing two files.
+
+In **Compare mode**, the script classifies differences as:
+
+- **Removed**: present in **BEFORE** but not in **AFTER**
+- **Added**: present in **AFTER** but not in **BEFORE**
+- **Changed**: same row exists in both, but one or more parameter values differ
+
+The comparison checks the **union of parameter columns from both files**, so it can also detect **new parameter headers** introduced in the newer file.
+
+---
 
 ## How to Use
 
-1. Run `ct_protocol_summary.py`.
-2. When the script starts running, a file explorer pop-up window will appear, allowing you to select the HTML file of interest.
-3. The next window will prompt you to choose the location where you wish to save the result.
-4. Finally, a pop-up window will ask you to provide a name for the output file.
-5. Upon successful execution, the script will print the following message to confirm the completion of the extraction and formatting process:
-   
-   > Data successfully extracted and saved to {file path and name} with formatting
-6. In the Excel spreadsheet, each variable has its own header, and you can easily filter the data as needed.
- 
+### 1. Run the script
 
+Run:
+
+```bash
+python ct_protocol_summary.py
