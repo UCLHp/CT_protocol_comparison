@@ -1,0 +1,8 @@
+dev/
+build/
+dist/
+*.spec
+*.xlsx
+.idea/
+__pycache__/
+*.pyc
