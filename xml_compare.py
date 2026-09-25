@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import filedialog
 from openpyxl.styles import PatternFill
 from openpyxl import load_workbook
+from datetime import datetime
 
 
 # ========== CONFIG ==========
@@ -66,10 +67,10 @@ def choose_mode_and_files(root):
     dialog.protocol("WM_DELETE_WINDOW", cancel)
     dialog.bind("<Escape>", lambda _e: cancel())
 
-    tk.Label(dialog, text="Choose mode:").pack(
-        padx=16,
-        pady=(16, 10)
-    )
+    tk.Label(
+        dialog,
+        text="Choose mode:"
+    ).pack(padx=16, pady=(16, 10))
 
     frame = tk.Frame(dialog)
     frame.pack(padx=16, pady=(0, 10))
@@ -151,14 +152,7 @@ def select_output_folder(root):
 def parse_privileges(root):
     rows = []
 
-    rows.append({
-        "privilegeid": "[FILE]",
-        "privilegeversion": "",
-        "privilegecategory": "",
-        "privilegegroup": "",
-        "privilegedisplayname": "",
-        "privilegesversion": root.findtext("privilegesversion", default="")
-    })
+    privileges_version = root.findtext("privilegesversion")
 
     for privilege in root.findall("privilege"):
         row = {}
@@ -170,7 +164,6 @@ def parse_privileges(root):
         row["privilegedisplayname"] = privilege.findtext(
             "privilegedisplayname"
         )
-        row["privilegesversion"] = ""
 
         for group in privilege.findall("usergroups/groupcuid"):
             group_name = group.text
@@ -187,8 +180,7 @@ def parse_privileges(root):
         "privilegeversion",
         "privilegecategory",
         "privilegegroup",
-        "privilegedisplayname",
-        "privilegesversion"
+        "privilegedisplayname"
     ]
 
     group_cols = sorted(
@@ -201,7 +193,7 @@ def parse_privileges(root):
 
     id_col = "privilegeid"
 
-    return df, id_col, fixed_cols
+    return df, id_col, fixed_cols, privileges_version
 
 
 def parse_users(root):
@@ -241,19 +233,20 @@ def parse_xml_file(xml_path):
     root = tree.getroot()
 
     if root.tag == "privileges":
-        df, id_col, fixed_cols = parse_privileges(root)
+        df, id_col, fixed_cols, file_version = parse_privileges(root)
         file_type = "privileges"
 
     elif root.tag == "OSPAccessImport":
         df, id_col, fixed_cols = parse_users(root)
         file_type = "users"
+        file_version = None
 
     else:
         raise ValueError(
             f"Unsupported XML type: {root.tag}"
         )
 
-    return df, file_type, id_col, fixed_cols
+    return df, file_type, id_col, fixed_cols, file_version
 
 
 # ========== STEP 3: Compare ==========
@@ -324,7 +317,15 @@ def compare_files(df_before, df_after, id_col):
 
     removed_df = pd.DataFrame(removed_rows)
     added_df = pd.DataFrame(added_rows)
-    changed_df = pd.DataFrame(changed_rows)
+    changed_df = pd.DataFrame(
+        changed_rows,
+        columns=[
+            id_col,
+            "Parameter",
+            "Before",
+            "After"
+        ]
+    )
 
     return removed_df, added_df, changed_df
 
@@ -406,6 +407,9 @@ def highlight_changes(
         row_id = row[id_col]
         parameter = row["Parameter"]
 
+        if row_id == "[FILE]":
+            continue
+
         if row_id not in changes:
             changes[row_id] = []
 
@@ -474,7 +478,13 @@ def main():
 
     # Extract one XML file
     if len(xml_files) == 1:
-        df, file_type, id_col, fixed_cols = parse_xml_file(
+        (
+            df,
+            file_type,
+            id_col,
+            fixed_cols,
+            file_version
+        ) = parse_xml_file(
             xml_files[0]
         )
 
@@ -483,10 +493,34 @@ def main():
             f"{file_type}_summary.xlsx"
         )
 
-        df.to_excel(
+        with pd.ExcelWriter(
             out_path,
-            index=False
-        )
+            engine="openpyxl"
+        ) as writer:
+
+            if file_type == "privileges":
+                df.to_excel(
+                    writer,
+                    sheet_name="Privileges",
+                    index=False
+                )
+
+                file_info = pd.DataFrame({
+                    "Setting": ["privilegesversion"],
+                    "Value": [file_version]
+                })
+
+                file_info.to_excel(
+                    writer,
+                    sheet_name="File Info",
+                    index=False
+                )
+
+            else:
+                df.to_excel(
+                    writer,
+                    index=False
+                )
 
         autosize_excel_columns(
             out_path
@@ -502,19 +536,42 @@ def main():
     before_path = xml_files[0]
     after_path = xml_files[1]
 
+    # Create a dated comparison folder
+    date_stamp = datetime.now().strftime("%Y%m%d")
+    run_number = 1
+
+    while True:
+        comparison_folder = os.path.join(
+            save_folder,
+            f"comparison_{date_stamp}_{run_number}"
+        )
+
+        if not os.path.exists(comparison_folder):
+            break
+
+        run_number += 1
+
+    os.makedirs(comparison_folder)
+
     (
         df_before,
         before_type,
         before_id_col,
-        before_fixed_cols
-    ) = parse_xml_file(before_path)
+        before_fixed_cols,
+        before_file_version
+    ) = parse_xml_file(
+        before_path
+    )
 
     (
         df_after,
         after_type,
         after_id_col,
-        after_fixed_cols
-    ) = parse_xml_file(after_path)
+        after_fixed_cols,
+        after_file_version
+    ) = parse_xml_file(
+        after_path
+    )
 
     if before_type != after_type:
         raise ValueError(
@@ -534,9 +591,26 @@ def main():
         id_col
     )
 
+    # Compare file-level privileges version
+    if (
+        before_type == "privileges"
+        and before_file_version != after_file_version
+    ):
+        file_change = pd.DataFrame([{
+            id_col: "[FILE]",
+            "Parameter": "privilegesversion",
+            "Before": before_file_version,
+            "After": after_file_version
+        }])
+
+        changed_df = pd.concat(
+            [changed_df, file_change],
+            ignore_index=True
+        )
+
     # Save comparison report
     report_path = os.path.join(
-        save_folder,
+        comparison_folder,
         "comparison_report.xlsx"
     )
 
@@ -586,12 +660,12 @@ def main():
     )[0]
 
     before_out = os.path.join(
-        save_folder,
+        comparison_folder,
         f"BEFORE_{before_base}_highlighted.xlsx"
     )
 
     after_out = os.path.join(
-        save_folder,
+        comparison_folder,
         f"AFTER_{after_base}_highlighted.xlsx"
     )
 
@@ -602,15 +676,65 @@ def main():
         fixed_cols
     )
 
-    df_before.to_excel(
+    # Save BEFORE file
+    with pd.ExcelWriter(
         before_out,
-        index=False
-    )
+        engine="openpyxl"
+    ) as writer:
 
-    df_after.to_excel(
+        if before_type == "privileges":
+            df_before.to_excel(
+                writer,
+                sheet_name="Privileges",
+                index=False
+            )
+
+            file_info = pd.DataFrame({
+                "Setting": ["privilegesversion"],
+                "Value": [before_file_version]
+            })
+
+            file_info.to_excel(
+                writer,
+                sheet_name="File Info",
+                index=False
+            )
+
+        else:
+            df_before.to_excel(
+                writer,
+                index=False
+            )
+
+    # Save AFTER file
+    with pd.ExcelWriter(
         after_out,
-        index=False
-    )
+        engine="openpyxl"
+    ) as writer:
+
+        if after_type == "privileges":
+            df_after.to_excel(
+                writer,
+                sheet_name="Privileges",
+                index=False
+            )
+
+            file_info = pd.DataFrame({
+                "Setting": ["privilegesversion"],
+                "Value": [after_file_version]
+            })
+
+            file_info.to_excel(
+                writer,
+                sheet_name="File Info",
+                index=False
+            )
+
+        else:
+            df_after.to_excel(
+                writer,
+                index=False
+            )
 
     # Highlight removed and added rows
     highlight_rows(
