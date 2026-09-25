@@ -10,29 +10,10 @@ from datetime import datetime
 
 # ========== CONFIG ==========
 
-gray_fill = PatternFill(
-    start_color="BFBFBF",
-    end_color="BFBFBF",
-    fill_type="solid"
-)
-
-green_fill = PatternFill(
-    start_color="CCFFCC",
-    end_color="CCFFCC",
-    fill_type="solid"
-)
-
-orange_fill = PatternFill(
-    start_color="FFA500",
-    end_color="FFA500",
-    fill_type="solid"
-)
-
-row_fill = PatternFill(
-    start_color="FFFFCC",
-    end_color="FFFFCC",
-    fill_type="solid"
-)
+gray_fill = PatternFill(start_color="BFBFBF", end_color="BFBFBF", fill_type="solid")
+green_fill = PatternFill(start_color="CCFFCC", end_color="CCFFCC", fill_type="solid")
+orange_fill = PatternFill(start_color="FFA500", end_color="FFA500", fill_type="solid")
+row_fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
 
 
 # ========== STEP 1: Select XML ==========
@@ -98,6 +79,7 @@ def choose_mode_and_files(root):
 
     dialog.lift()
     dialog.focus_force()
+
     dialog.after(
         300,
         lambda: dialog.attributes("-topmost", False)
@@ -151,6 +133,7 @@ def select_output_folder(root):
 
 def parse_privileges(root):
     rows = []
+    rows_by_id = {}
 
     privileges_version = root.findtext("privilegesversion")
 
@@ -161,9 +144,7 @@ def parse_privileges(root):
         row["privilegeversion"] = privilege.findtext("privilegeversion")
         row["privilegecategory"] = privilege.findtext("privilegecategory")
         row["privilegegroup"] = privilege.findtext("privilegegroup")
-        row["privilegedisplayname"] = privilege.findtext(
-            "privilegedisplayname"
-        )
+        row["privilegedisplayname"] = privilege.findtext("privilegedisplayname")
 
         for group in privilege.findall("usergroups/groupcuid"):
             group_name = group.text
@@ -173,15 +154,12 @@ def parse_privileges(root):
 
         rows.append(row)
 
+        row_id = row["privilegeid"]
+        rows_by_id[row_id] = row
+
     df = pd.DataFrame(rows).fillna("")
 
-    fixed_cols = [
-        "privilegeid",
-        "privilegeversion",
-        "privilegecategory",
-        "privilegegroup",
-        "privilegedisplayname"
-    ]
+    fixed_cols = ["privilegeid", "privilegeversion", "privilegecategory", "privilegegroup", "privilegedisplayname"]
 
     group_cols = sorted(
         col for col in df.columns
@@ -193,11 +171,12 @@ def parse_privileges(root):
 
     id_col = "privilegeid"
 
-    return df, id_col, fixed_cols, privileges_version
+    return df, rows_by_id, id_col, fixed_cols, privileges_version
 
 
 def parse_users(root):
     rows = []
+    rows_by_id = {}
 
     for user in root.findall("users/user"):
         row = {}
@@ -210,22 +189,19 @@ def parse_users(root):
 
         rows.append(row)
 
+        row_id = row["userid"]
+        rows_by_id[row_id] = row
+
     df = pd.DataFrame(rows).fillna("")
 
-    fixed_cols = [
-        "userid",
-        "username",
-        "isaccountdisabled",
-        "groupcuid",
-        "provider"
-    ]
+    fixed_cols = ["userid", "username", "isaccountdisabled", "groupcuid", "provider"]
 
     df = df[fixed_cols]
     df = df.sort_values("userid").reset_index(drop=True)
 
     id_col = "userid"
 
-    return df, id_col, fixed_cols
+    return df, rows_by_id, id_col, fixed_cols
 
 
 def parse_xml_file(xml_path):
@@ -233,11 +209,24 @@ def parse_xml_file(xml_path):
     root = tree.getroot()
 
     if root.tag == "privileges":
-        df, id_col, fixed_cols, file_version = parse_privileges(root)
+        (
+            df,
+            rows_by_id,
+            id_col,
+            fixed_cols,
+            file_version
+        ) = parse_privileges(root)
+
         file_type = "privileges"
 
     elif root.tag == "OSPAccessImport":
-        df, id_col, fixed_cols = parse_users(root)
+        (
+            df,
+            rows_by_id,
+            id_col,
+            fixed_cols
+        ) = parse_users(root)
+
         file_type = "users"
         file_version = None
 
@@ -246,25 +235,16 @@ def parse_xml_file(xml_path):
             f"Unsupported XML type: {root.tag}"
         )
 
-    return df, file_type, id_col, fixed_cols, file_version
+    return df, rows_by_id, file_type, id_col, fixed_cols, file_version
 
 
 # ========== STEP 3: Compare ==========
 
-def df_to_dict(df, id_col):
-    result = {}
-
-    for _, row in df.iterrows():
-        row_id = row[id_col]
-        result[row_id] = row.to_dict()
-
-    return result
-
-
-def compare_files(df_before, df_after, id_col):
-    dict_before = df_to_dict(df_before, id_col)
-    dict_after = df_to_dict(df_after, id_col)
-
+def compare_files(
+    dict_before,
+    dict_after,
+    id_col
+):
     ids_before = set(dict_before.keys())
     ids_after = set(dict_after.keys())
 
@@ -286,26 +266,33 @@ def compare_files(df_before, df_after, id_col):
             dict_after[row_id]
         )
 
-    all_columns = sorted(
-        (
-            set(df_before.columns)
-            | set(df_after.columns)
-        )
-        - {id_col}
-    )
+    all_columns = set()
+
+    for row in dict_before.values():
+        all_columns.update(row.keys())
+
+    for row in dict_after.values():
+        all_columns.update(row.keys())
+
+    all_columns.remove(id_col)
+    all_columns = sorted(all_columns)
 
     for row_id in common_ids:
         before_row = dict_before[row_id]
         after_row = dict_after[row_id]
 
         for column in all_columns:
-            before_value = str(
-                before_row.get(column, "")
-            )
+            before_value = before_row.get(column, "")
+            after_value = after_row.get(column, "")
 
-            after_value = str(
-                after_row.get(column, "")
-            )
+            if before_value is None:
+                before_value = ""
+
+            if after_value is None:
+                after_value = ""
+
+            before_value = str(before_value)
+            after_value = str(after_value)
 
             if before_value != after_value:
                 changed_rows.append({
@@ -315,8 +302,14 @@ def compare_files(df_before, df_after, id_col):
                     "After": after_value
                 })
 
-    removed_df = pd.DataFrame(removed_rows)
-    added_df = pd.DataFrame(added_rows)
+    removed_df = pd.DataFrame(
+        removed_rows
+    ).fillna("")
+
+    added_df = pd.DataFrame(
+        added_rows
+    ).fillna("")
+
     changed_df = pd.DataFrame(
         changed_rows,
         columns=[
@@ -480,6 +473,7 @@ def main():
     if len(xml_files) == 1:
         (
             df,
+            rows_by_id,
             file_type,
             id_col,
             fixed_cols,
@@ -488,9 +482,13 @@ def main():
             xml_files[0]
         )
 
+        xml_base = os.path.splitext(
+            os.path.basename(xml_files[0])
+        )[0]
+
         out_path = os.path.join(
             save_folder,
-            f"{file_type}_summary.xlsx"
+            f"{xml_base}_summary.xlsx"
         )
 
         with pd.ExcelWriter(
@@ -555,6 +553,7 @@ def main():
 
     (
         df_before,
+        dict_before,
         before_type,
         before_id_col,
         before_fixed_cols,
@@ -565,6 +564,7 @@ def main():
 
     (
         df_after,
+        dict_after,
         after_type,
         after_id_col,
         after_fixed_cols,
@@ -586,8 +586,8 @@ def main():
         added_df,
         changed_df
     ) = compare_files(
-        df_before,
-        df_after,
+        dict_before,
+        dict_after,
         id_col
     )
 
@@ -608,6 +608,20 @@ def main():
             ignore_index=True
         )
 
+    # Create comparison file information
+    comparison_info = pd.DataFrame({
+        "": [
+            "BEFORE",
+            "AFTER",
+            "Comparison date"
+        ],
+        "File": [
+            os.path.basename(before_path),
+            os.path.basename(after_path),
+            datetime.now().strftime("%d/%m/%Y")
+        ]
+    })
+
     # Save comparison report
     report_path = os.path.join(
         comparison_folder,
@@ -618,6 +632,12 @@ def main():
         report_path,
         engine="openpyxl"
     ) as writer:
+
+        comparison_info.to_excel(
+            writer,
+            sheet_name="File Info",
+            index=False
+        )
 
         removed_df.to_excel(
             writer,
