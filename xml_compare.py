@@ -11,9 +11,7 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 from openpyxl import load_workbook
 
-
 MAX_ID_FIELDS = 6
-
 
 # ============================================================
 # BASIC HELPERS
@@ -22,14 +20,11 @@ MAX_ID_FIELDS = 6
 def clean(value):
     return "" if value is None else str(value).strip()
 
-
 def strip_namespace(text):
     return re.sub(r"\{[^}]*\}", "", str(text))
 
-
 def readable_path(path):
     return strip_namespace(path)
-
 
 def canonical_number(value):
     """
@@ -60,7 +55,6 @@ def canonical_number(value):
 
     return result
 
-
 def comparison_token(value):
     """
     Numeric-looking values compare numerically.
@@ -75,73 +69,50 @@ def comparison_token(value):
 
     return ("TEXT", value)
 
-
 def values_equal(a, b):
     return comparison_token(a) == comparison_token(b)
-
 
 # ============================================================
 # FOLDER SELECTION
 # ============================================================
 
 def choose_folders(root):
-
-    old_folder = filedialog.askdirectory(
-        parent=root,
-        title="Select OLD folder"
-    )
+    old_folder = filedialog.askdirectory(parent=root, title='Select OLD folder')
 
     if not old_folder:
         return None
 
-    new_folder = filedialog.askdirectory(
-        parent=root,
-        title="Select NEW folder"
-    )
+    new_folder = filedialog.askdirectory(parent=root, title='Select NEW folder')
 
     if not new_folder:
         return None
 
-    output_folder = filedialog.askdirectory(
-        parent=root,
-        title="Select Folder to Save Output"
-    )
+    output_folder = filedialog.askdirectory(parent=root, title='Select Folder to Save Output')
 
     if not output_folder:
         return None
 
     return old_folder, new_folder, output_folder
 
-
 # ============================================================
 # XML FILE COLLECTION
 # ============================================================
 
 def collect_xml_files(folder):
-
     files = {}
 
-    for current_folder, _, filenames in os.walk(folder):
-
+    for (current_folder, _, filenames) in os.walk(folder):
         for filename in filenames:
-
             if not filename.lower().endswith(".xml"):
                 continue
 
-            full_path = os.path.join(
-                current_folder,
-                filename
-            )
+            full_path = os.path.join(current_folder, filename)
 
-            relative_path = os.path.relpath(
-                full_path,
-                folder
-            )
+            relative_path = os.path.relpath(full_path, folder)
 
             files[relative_path] = full_path
 
     return files
-
 
 # ============================================================
 # IDENTITY FACTS
@@ -175,13 +146,8 @@ def identity_facts(element):
     def walk(node, prefix=""):
 
         # Attributes on current node
-        for attribute, value in node.attrib.items():
-
-            field = (
-                f"{prefix}@{attribute}"
-                if prefix
-                else f"@{attribute}"
-            )
+        for (attribute, value) in node.attrib.items():
+            field = f'{prefix}@{attribute}' if prefix else f'@{attribute}'
 
             facts[field] = clean(value)
 
@@ -189,7 +155,6 @@ def identity_facts(element):
 
         # Leaf value
         if not children:
-
             if prefix:
                 facts[f"{prefix}#text"] = clean(node.text)
             else:
@@ -212,90 +177,47 @@ def identity_facts(element):
 
             child = same_tag_children[0]
 
-            child_prefix = (
-                f"{prefix}{tag}/"
-                if prefix
-                else f"{tag}/"
-            )
+            child_prefix = f'{prefix}{tag}/' if prefix else f'{tag}/'
 
-            walk(
-                child,
-                child_prefix
-            )
+            walk(child, child_prefix)
 
     walk(element)
 
     return facts
-
 
 # ============================================================
 # EXACT IDENTITY MATCHING
 # ============================================================
 
 def fact_token(facts, field):
-
     if field not in facts:
         return ("MISSING", "")
 
-    value_type, value = comparison_token(
-        facts[field]
-    )
+    value_type, value = comparison_token(facts[field])
 
-    return (
-        "PRESENT",
-        value_type,
-        value
-    )
-
+    return ('PRESENT', value_type, value)
 
 def identity_for(element, fields):
-
     facts = identity_facts(element)
 
-    return tuple(
-        fact_token(facts, field)
-        for field in fields
-    )
-
+    return tuple((fact_token(facts, field) for field in fields))
 
 def identities_unique(elements, fields):
-
     if len(elements) <= 1:
         return True
 
-    identities = [
-        identity_for(element, fields)
-        for element in elements
-    ]
+    identities = [identity_for(element, fields) for element in elements]
 
     return len(identities) == len(set(identities))
 
+def overlap_count(old_elements, new_elements, fields):
+    old_ids = {identity_for(element, fields) for element in old_elements}
 
-def overlap_count(
-    old_elements,
-    new_elements,
-    fields
-):
-
-    old_ids = {
-        identity_for(element, fields)
-        for element in old_elements
-    }
-
-    new_ids = {
-        identity_for(element, fields)
-        for element in new_elements
-    }
+    new_ids = {identity_for(element, fields) for element in new_elements}
 
     return len(old_ids & new_ids)
 
-
-def choose_identity_fields(
-    old_elements,
-    new_elements,
-    parent_path,
-    tag
-):
+def choose_identity_fields(old_elements, new_elements, parent_path, tag):
     """
     Find the smallest exact property combination that:
 
@@ -307,16 +229,9 @@ def choose_identity_fields(
     No sibling positions.
     """
 
-    all_elements = (
-        list(old_elements)
-        +
-        list(new_elements)
-    )
+    all_elements = list(old_elements) + list(new_elements)
 
-    fact_sets = [
-        identity_facts(element)
-        for element in all_elements
-    ]
+    fact_sets = [identity_facts(element) for element in all_elements]
 
     candidate_fields = set()
 
@@ -326,11 +241,7 @@ def choose_identity_fields(
     useful_fields = []
 
     for field in candidate_fields:
-
-        tokens = {
-            fact_token(facts, field)
-            for facts in fact_sets
-        }
+        tokens = {fact_token(facts, field) for facts in fact_sets}
 
         if len(tokens) > 1:
             useful_fields.append(field)
@@ -338,7 +249,6 @@ def choose_identity_fields(
     useful_fields = sorted(useful_fields)
 
     if not useful_fields:
-
         raise ValueError(
             "\nCannot distinguish repeated XML objects.\n\n"
             f"Parent:\n{readable_path(parent_path)}\n\n"
@@ -347,46 +257,25 @@ def choose_identity_fields(
             "through non-repeating descendant branches."
         )
 
-    max_possible_overlap = min(
-        len(old_elements),
-        len(new_elements)
-    )
+    max_possible_overlap = min(len(old_elements), len(new_elements))
 
     best_fields = None
     best_overlap = -1
 
-    max_size = min(
-        MAX_ID_FIELDS,
-        len(useful_fields)
-    )
+    max_size = min(MAX_ID_FIELDS, len(useful_fields))
 
     for size in range(1, max_size + 1):
-
         best_this_size = None
         best_this_overlap = -1
 
-        for fields in combinations(
-            useful_fields,
-            size
-        ):
-
-            if not identities_unique(
-                old_elements,
-                fields
-            ):
+        for fields in combinations(useful_fields, size):
+            if not identities_unique(old_elements, fields):
                 continue
 
-            if not identities_unique(
-                new_elements,
-                fields
-            ):
+            if not identities_unique(new_elements, fields):
                 continue
 
-            overlap = overlap_count(
-                old_elements,
-                new_elements,
-                fields
-            )
+            overlap = overlap_count(old_elements, new_elements, fields)
 
             if (
                 overlap > best_this_overlap
@@ -415,20 +304,11 @@ def choose_identity_fields(
                 best_fields = fields
 
         # Perfect overlap using smallest possible field count.
-        if (
-            best_this_size is not None
-            and best_this_overlap == max_possible_overlap
-        ):
-            return (
-                best_this_size,
-                best_this_overlap
-            )
+        if best_this_size is not None and best_this_overlap == max_possible_overlap:
+            return (best_this_size, best_this_overlap)
 
     if best_fields is not None:
-        return (
-            best_fields,
-            best_overlap
-        )
+        return (best_fields, best_overlap)
 
     raise ValueError(
         "\nCannot uniquely identify repeated XML objects "
@@ -437,13 +317,11 @@ def choose_identity_fields(
         f"Repeated element:\n{strip_namespace(tag)}"
     )
 
-
 # ============================================================
 # PATH CREATION
 # ============================================================
 
 def field_label(field):
-
     field = strip_namespace(field)
 
     if field == "#text":
@@ -454,53 +332,28 @@ def field_label(field):
 
     return field.rstrip("/")
 
-
 def identity_display_value(token):
-
     if token[0] == "MISSING":
         return "<MISSING>"
 
     value = token[2]
 
-    return quote(
-        value,
-        safe="-_.~ "
-    )
+    return quote(value, safe='-_.~ ')
 
-
-def identity_segment(
-    tag,
-    fields,
-    identity
-):
-
+def identity_segment(tag, fields, identity):
     segment = str(tag)
 
-    for field, token in zip(
-        fields,
-        identity
-    ):
-
-        segment += (
-            f"[{field_label(field)}="
-            f"{identity_display_value(token)}]"
-        )
+    for (field, token) in zip(fields, identity):
+        segment += f'[{field_label(field)}={identity_display_value(token)}]'
 
     return segment
-
 
 # ============================================================
 # DICTIONARY BUILDING
 # ============================================================
 
-def add_value(
-    dictionary,
-    key,
-    value
-):
-
+def add_value(dictionary, key, value):
     if key in dictionary:
-
         raise ValueError(
             "\nDuplicate contextual path generated:\n\n"
             f"{readable_path(key)}"
@@ -508,35 +361,19 @@ def add_value(
 
     dictionary[key] = clean(value)
 
-
-def record_element(
-    element,
-    path,
-    dictionary
-):
-
+def record_element(element, path, dictionary):
     if element is None:
         return
 
     # Attributes
-    for attribute, value in element.attrib.items():
-
-        add_value(
-            dictionary,
-            f"{path}/@{attribute}",
-            value
-        )
+    for (attribute, value) in element.attrib.items():
+        add_value(dictionary, f'{path}/@{attribute}', value)
 
     children = list(element)
 
     # Leaf value
     if not children:
-
-        add_value(
-            dictionary,
-            path,
-            element.text
-        )
+        add_value(dictionary, path, element.text)
 
         return
 
@@ -544,13 +381,7 @@ def record_element(
     text = clean(element.text)
 
     if text:
-
-        add_value(
-            dictionary,
-            f"{path}/#text",
-            text
-        )
-
+        add_value(dictionary, f'{path}/#text', text)
 
 def flatten_pair(
     old_element,
@@ -562,74 +393,38 @@ def flatten_pair(
     identity_rules
 ):
 
-    record_element(
-        old_element,
-        path,
-        old_dictionary
-    )
+    record_element(old_element, path, old_dictionary)
 
-    record_element(
-        new_element,
-        path,
-        new_dictionary
-    )
+    record_element(new_element, path, new_dictionary)
 
     old_groups = defaultdict(list)
     new_groups = defaultdict(list)
 
     if old_element is not None:
-
         for child in old_element:
             old_groups[child.tag].append(child)
 
     if new_element is not None:
-
         for child in new_element:
             new_groups[child.tag].append(child)
 
-    all_tags = sorted(
-        set(old_groups)
-        |
-        set(new_groups),
-        key=str
-    )
+    all_tags = sorted(set(old_groups) | set(new_groups), key=str)
 
     for tag in all_tags:
+        old_children = old_groups.get(tag, [])
 
-        old_children = old_groups.get(
-            tag,
-            []
-        )
-
-        new_children = new_groups.get(
-            tag,
-            []
-        )
+        new_children = new_groups.get(tag, [])
 
         # ----------------------------------------------------
         # Non-repeated child
         # ----------------------------------------------------
 
-        if max(
-            len(old_children),
-            len(new_children)
-        ) <= 1:
+        if max(len(old_children), len(new_children)) <= 1:
+            old_child = old_children[0] if old_children else None
 
-            old_child = (
-                old_children[0]
-                if old_children
-                else None
-            )
+            new_child = new_children[0] if new_children else None
 
-            new_child = (
-                new_children[0]
-                if new_children
-                else None
-            )
-
-            child_path = (
-                f"{path}/{tag}"
-            )
+            child_path = f'{path}/{tag}'
 
             flatten_pair(
                 old_child,
@@ -647,14 +442,7 @@ def flatten_pair(
         # Repeated sibling objects
         # ----------------------------------------------------
 
-        identity_fields, overlap = (
-            choose_identity_fields(
-                old_children,
-                new_children,
-                path,
-                tag
-            )
-        )
+        identity_fields, overlap = choose_identity_fields(old_children, new_children, path, tag)
 
         identity_rules.append({
             "File": filename,
@@ -672,11 +460,7 @@ def flatten_pair(
         old_map = {}
 
         for child in old_children:
-
-            identity = identity_for(
-                child,
-                identity_fields
-            )
+            identity = identity_for(child, identity_fields)
 
             if identity in old_map:
                 raise ValueError(
@@ -690,11 +474,7 @@ def flatten_pair(
         new_map = {}
 
         for child in new_children:
-
-            identity = identity_for(
-                child,
-                identity_fields
-            )
+            identity = identity_for(child, identity_fields)
 
             if identity in new_map:
                 raise ValueError(
@@ -705,24 +485,12 @@ def flatten_pair(
 
             new_map[identity] = child
 
-        all_identities = sorted(
-            set(old_map)
-            |
-            set(new_map),
-            key=repr
-        )
+        all_identities = sorted(set(old_map) | set(new_map), key=repr)
 
         for identity in all_identities:
+            segment = identity_segment(tag, identity_fields, identity)
 
-            segment = identity_segment(
-                tag,
-                identity_fields,
-                identity
-            )
-
-            child_path = (
-                f"{path}/{segment}"
-            )
+            child_path = f'{path}/{segment}'
 
             flatten_pair(
                 old_map.get(identity),
@@ -734,28 +502,16 @@ def flatten_pair(
                 identity_rules
             )
 
-
 # ============================================================
 # XML PAIR
 # ============================================================
 
-def parse_xml_pair(
-    old_path,
-    new_path,
-    filename,
-    identity_rules
-):
+def parse_xml_pair(old_path, new_path, filename, identity_rules):
+    old_root = ET.parse(old_path).getroot()
 
-    old_root = ET.parse(
-        old_path
-    ).getroot()
-
-    new_root = ET.parse(
-        new_path
-    ).getroot()
+    new_root = ET.parse(new_path).getroot()
 
     if old_root.tag != new_root.tag:
-
         raise ValueError(
             "OLD and NEW root elements differ: "
             f"{strip_namespace(old_root.tag)} vs "
@@ -777,47 +533,26 @@ def parse_xml_pair(
         identity_rules
     )
 
-    return (
-        old_dictionary,
-        new_dictionary
-    )
-
+    return (old_dictionary, new_dictionary)
 
 # ============================================================
 # DICTIONARY COMPARISON
 # ============================================================
 
-def compare_dictionaries(
-    old_dictionary,
-    new_dictionary,
-    filename
-):
-
+def compare_dictionaries(old_dictionary, new_dictionary, filename):
     rows = []
 
-    all_keys = sorted(
-        set(old_dictionary)
-        |
-        set(new_dictionary)
-    )
+    all_keys = sorted(set(old_dictionary) | set(new_dictionary))
 
     for key in all_keys:
-
         in_old = key in old_dictionary
         in_new = key in new_dictionary
 
-        old_value = old_dictionary.get(
-            key,
-            ""
-        )
+        old_value = old_dictionary.get(key, '')
 
-        new_value = new_dictionary.get(
-            key,
-            ""
-        )
+        new_value = new_dictionary.get(key, '')
 
         if not in_old:
-
             status = "Added"
 
         elif not in_new:
@@ -845,55 +580,30 @@ def compare_dictionaries(
 
     return rows
 
-
 # ============================================================
 # FOLDER COMPARISON
 # ============================================================
 
-def compare_folders(
-    old_folder,
-    new_folder
-):
+def compare_folders(old_folder, new_folder):
+    old_files = collect_xml_files(old_folder)
 
-    old_files = collect_xml_files(
-        old_folder
-    )
-
-    new_files = collect_xml_files(
-        new_folder
-    )
+    new_files = collect_xml_files(new_folder)
 
     rows = []
     identity_rules = []
 
-    all_files = sorted(
-        set(old_files)
-        |
-        set(new_files)
-    )
+    all_files = sorted(set(old_files) | set(new_files))
 
     total = len(all_files)
 
-    for index, relative_path in enumerate(
-        all_files,
-        start=1
-    ):
+    for (index, relative_path) in enumerate(all_files, start=1):
+        print(f'[{index}/{total}] {relative_path}', flush=True)
 
-        print(
-            f"[{index}/{total}] {relative_path}",
-            flush=True
-        )
+        old_path = old_files.get(relative_path)
 
-        old_path = old_files.get(
-            relative_path
-        )
-
-        new_path = new_files.get(
-            relative_path
-        )
+        new_path = new_files.get(relative_path)
 
         if old_path is None:
-
             rows.append({
                 "File": relative_path,
                 "Status": "Added",
@@ -905,7 +615,6 @@ def compare_folders(
             continue
 
         if new_path is None:
-
             rows.append({
                 "File": relative_path,
                 "Status": "Removed",
@@ -928,13 +637,7 @@ def compare_folders(
                 identity_rules
             )
 
-            rows.extend(
-                compare_dictionaries(
-                    old_dictionary,
-                    new_dictionary,
-                    relative_path
-                )
-            )
+            rows.extend(compare_dictionaries(old_dictionary, new_dictionary, relative_path))
 
         except Exception as error:
 
@@ -946,16 +649,7 @@ def compare_folders(
                 "After": str(error)
             })
 
-    differences_df = pd.DataFrame(
-        rows,
-        columns=[
-            "File",
-            "Status",
-            "Key",
-            "Before",
-            "After"
-        ]
-    )
+    differences_df = pd.DataFrame(rows, columns=['File', 'Status', 'Key', 'Before', 'After'])
 
     identity_df = pd.DataFrame(
         identity_rules,
@@ -972,53 +666,33 @@ def compare_folders(
 
     return differences_df, identity_df
 
-
 # ============================================================
 # EXCEL OUTPUT
 # ============================================================
 
 def next_report_path(folder):
-
     base = "xml_comparison_report"
 
-    path = os.path.join(
-        folder,
-        f"{base}.xlsx"
-    )
+    path = os.path.join(folder, f'{base}.xlsx')
 
     number = 1
 
     while os.path.exists(path):
-
-        path = os.path.join(
-            folder,
-            f"{base}_{number}.xlsx"
-        )
+        path = os.path.join(folder, f'{base}_{number}.xlsx')
 
         number += 1
 
     return path
 
-
 def format_excel(filepath):
-
-    workbook = load_workbook(
-        filepath
-    )
+    workbook = load_workbook(filepath)
 
     for worksheet in workbook.worksheets:
-
         worksheet.freeze_panes = "A2"
-        worksheet.auto_filter.ref = (
-            worksheet.dimensions
-        )
+        worksheet.auto_filter.ref = worksheet.dimensions
 
         for column_cells in worksheet.columns:
-
-            max_length = max(
-                len(str(cell.value or ""))
-                for cell in column_cells
-            )
+            max_length = max((len(str(cell.value or '')) for cell in column_cells))
 
             worksheet.column_dimensions[
                 column_cells[0].column_letter
@@ -1029,13 +703,11 @@ def format_excel(filepath):
 
     workbook.save(filepath)
 
-
 # ============================================================
 # MAIN
 # ============================================================
 
 def main():
-
     root = tk.Tk()
     root.withdraw()
 
@@ -1047,54 +719,25 @@ def main():
         print("Cancelled.")
         return
 
-    (
-        old_folder,
-        new_folder,
-        output_folder
-    ) = folders
+    old_folder, new_folder, output_folder = folders
 
     print("\nStarting comparison...\n")
 
-    differences, identity_rules = (
-        compare_folders(
-            old_folder,
-            new_folder
-        )
-    )
+    differences, identity_rules = compare_folders(old_folder, new_folder)
 
-    report_path = next_report_path(
-        output_folder
-    )
+    report_path = next_report_path(output_folder)
 
-    with pd.ExcelWriter(
-        report_path,
-        engine="openpyxl"
-    ) as writer:
+    with pd.ExcelWriter(report_path, engine='openpyxl') as writer:
+        differences.to_excel(writer, sheet_name='Differences', index=False)
 
-        differences.to_excel(
-            writer,
-            sheet_name="Differences",
-            index=False
-        )
-
-        identity_rules.to_excel(
-            writer,
-            sheet_name="Identity Rules",
-            index=False
-        )
+        identity_rules.to_excel(writer, sheet_name='Identity Rules', index=False)
 
     format_excel(report_path)
 
     print()
-    print(
-        f"Found {len(differences)} "
-        f"reportable differences."
-    )
+    print(f'Found {len(differences)} reportable differences.')
 
-    print(
-        f"Report saved to:\n{report_path}"
-    )
-
+    print(f'Report saved to:\n{report_path}')
 
 if __name__ == "__main__":
     main()

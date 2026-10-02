@@ -6,7 +6,6 @@ from string import Template
 
 from lxml import etree
 
-
 # ============================================================
 # XML DISPLAY
 # ============================================================
@@ -16,20 +15,11 @@ def read_xml_text(path):
         return ""
 
     try:
-        parser = etree.XMLParser(
-            remove_blank_text=True,
-            remove_comments=False,
-            huge_tree=True,
-        )
+        parser = etree.XMLParser(remove_blank_text=True, remove_comments=False, huge_tree=True)
 
         tree = etree.parse(path, parser)
 
-        data = etree.tostring(
-            tree,
-            pretty_print=True,
-            encoding="utf-8",
-            xml_declaration=True,
-        )
+        data = etree.tostring(tree, pretty_print=True, encoding='utf-8', xml_declaration=True)
 
         return data.decode("utf-8")
 
@@ -43,11 +33,7 @@ def read_xml_text(path):
             re.IGNORECASE,
         )
 
-        encoding = (
-            match.group(1).decode("ascii")
-            if match
-            else "utf-8"
-        )
+        encoding = match.group(1).decode('ascii') if match else 'utf-8'
 
         try:
             return data.decode(encoding)
@@ -56,77 +42,38 @@ def read_xml_text(path):
             UnicodeDecodeError,
             LookupError,
         ):
-            return data.decode(
-                "utf-8",
-                errors="replace",
-            )
-
+            return data.decode('utf-8', errors='replace')
 
 def safe_filename(name):
-    name = (
-        name
-        .replace("\\", "__")
-        .replace("/", "__")
-    )
+    name = name.replace('\\', '__').replace('/', '__')
 
-    return re.sub(
-        r"[^A-Za-z0-9._-]",
-        "_",
-        name,
-    )
-
+    return re.sub('[^A-Za-z0-9._-]', '_', name)
 
 # ============================================================
 # LINE STATUS
 # ============================================================
 
-def set_status(
-    status_map,
-    line,
-    status,
-):
+def set_status(status_map, line, status):
     if not line:
         return
 
-    priority = {
-        "Changed": 3,
-        "Added": 2,
-        "Removed": 2,
-    }
+    priority = {'Changed': 3, 'Added': 2, 'Removed': 2}
 
     current = status_map.get(line)
 
-    if (
-        current is None
-        or
-        priority.get(status, 0)
-        >
-        priority.get(current, 0)
-    ):
+    if current is None or priority.get(status, 0) > priority.get(current, 0):
         status_map[line] = status
 
-
-def make_line_statuses(
-    differences,
-    old_text,
-    new_text,
-    whole_file_status=None,
-):
+def make_line_statuses(differences, old_text, new_text, whole_file_status=None):
     old_status = {}
     new_status = {}
 
     if whole_file_status == "Removed":
-        for number in range(
-            1,
-            len(old_text.splitlines()) + 1,
-        ):
+        for number in range(1, len(old_text.splitlines()) + 1):
             old_status[number] = "Removed"
 
     elif whole_file_status == "Added":
-        for number in range(
-            1,
-            len(new_text.splitlines()) + 1,
-        ):
+        for number in range(1, len(new_text.splitlines()) + 1):
             new_status[number] = "Added"
 
     else:
@@ -134,34 +81,17 @@ def make_line_statuses(
             status = row["Status"]
 
             if status == "Changed":
-                set_status(
-                    old_status,
-                    row.get("Old Line"),
-                    "Changed",
-                )
+                set_status(old_status, row.get('Old Line'), 'Changed')
 
-                set_status(
-                    new_status,
-                    row.get("New Line"),
-                    "Changed",
-                )
+                set_status(new_status, row.get('New Line'), 'Changed')
 
             elif status == "Removed":
-                set_status(
-                    old_status,
-                    row.get("Old Line"),
-                    "Removed",
-                )
+                set_status(old_status, row.get('Old Line'), 'Removed')
 
             elif status == "Added":
-                set_status(
-                    new_status,
-                    row.get("New Line"),
-                    "Added",
-                )
+                set_status(new_status, row.get('New Line'), 'Added')
 
     return old_status, new_status
-
 
 # ============================================================
 # WIDTH ESTIMATION
@@ -182,19 +112,9 @@ def estimate_width_px(lines):
         if length > max_chars:
             max_chars = length
 
-    width = int(
-        90
-        +
-        max_chars * 7.3
-        +
-        30
-    )
+    width = int(90 + max_chars * 7.3 + 30)
 
-    return max(
-        900,
-        width,
-    )
-
+    return max(900, width)
 
 # ============================================================
 # FILE TEMPLATE
@@ -679,593 +599,207 @@ NEW
 
 
 <script>
-
-
-/* =========================================================
-   CONSTANTS
+/* ========================================================= CONSTANTS
    ========================================================= */
-
 const LINE_HEIGHT = 18;
-
 /*
 Only this many lines above/below the viewport are rendered.
 Even a 50,000-line XML therefore remains lightweight.
 */
 const BUFFER_LINES = 150;
-
-
-/* =========================================================
-   SOURCE DATA
+/* ========================================================= SOURCE DATA
    ========================================================= */
-
-const changes =
-    $changes_json;
-
-const oldLines =
-    $old_lines_json;
-
-const newLines =
-    $new_lines_json;
-
-const oldStatuses =
-    $old_status_json;
-
-const newStatuses =
-    $new_status_json;
-
-const oldWidth =
-    $old_width;
-
-const newWidth =
-    $new_width;
-
-
-/* =========================================================
-   GLOBAL STATE
+const changes = $changes_json;
+const oldLines = $old_lines_json;
+const newLines = $new_lines_json;
+const oldStatuses = $old_status_json;
+const newStatuses = $new_status_json;
+const oldWidth = $old_width;
+const newWidth = $new_width;
+/* ========================================================= GLOBAL STATE
    ========================================================= */
-
 let currentChange = -1;
-
 let selectingText = false;
-
 let pendingSyncFrame = null;
-
 let pendingSyncSource = null;
-
 let pendingSyncTarget = null;
-
-
-/* =========================================================
-   ELEMENTS
+/* ========================================================= ELEMENTS
    ========================================================= */
-
-const syncScrollCheckbox =
-    document.getElementById(
-        "syncScroll"
-    );
-
-const showUnchangedCheckbox =
-    document.getElementById(
-        "showUnchanged"
-    );
-
-const syncStatus =
-    document.getElementById(
-        "syncStatus"
-    );
-
-const changeInfo =
-    document.getElementById(
-        "changeInfo"
-    );
-
-
-/* =========================================================
-   CHANGED LINE LISTS
-
+const syncScrollCheckbox = document.getElementById("syncScroll");
+const showUnchangedCheckbox = document.getElementById("showUnchanged");
+const syncStatus = document.getElementById("syncStatus");
+const changeInfo = document.getElementById("changeInfo");
+/* ========================================================= CHANGED LINE LISTS
    Used when Show unchanged lines is OFF.
    ========================================================= */
-
-function sortedStatusLines(
-    statuses
-) {
-
-    return Object.keys(
-        statuses
-    )
-    .map(
-        Number
-    )
-    .sort(
-        function(a, b) {
-            return a - b;
-        }
-    );
+function sortedStatusLines(statuses) {
+    return Object.keys(statuses)
+    .map(Number)
+    .sort(function(a, b) { return a - b; });
 }
-
-
-const oldChangedLines =
-    sortedStatusLines(
-        oldStatuses
-    );
-
-const newChangedLines =
-    sortedStatusLines(
-        newStatuses
-    );
-
-
-/* =========================================================
-   PANE STATE
+const oldChangedLines = sortedStatusLines(oldStatuses);
+const newChangedLines = sortedStatusLines(newStatuses);
+/* ========================================================= PANE STATE
    ========================================================= */
-
 const oldState = {
-
     side: "old",
-
     pane:
-        document.getElementById(
-            "oldPane"
-        ),
-
+        document.getElementById("oldPane"), 
     space:
-        document.getElementById(
-            "oldSpace"
-        ),
-
+        document.getElementById("oldSpace"), 
     virtual:
-        document.getElementById(
-            "oldVirtual"
-        ),
-
+        document.getElementById("oldVirtual"), 
     range:
-        document.getElementById(
-            "oldRange"
-        ),
-
+        document.getElementById("oldRange"), 
     lines:
         oldLines,
-
     statuses:
         oldStatuses,
-
     changedLines:
         oldChangedLines,
-
     width:
         oldWidth,
-
     renderStart:
         -1,
-
     renderEnd:
         -1,
-
     lastFocus:
         null,
-
     suppressSync:
         false,
 };
-
-
 const newState = {
-
     side: "new",
-
     pane:
-        document.getElementById(
-            "newPane"
-        ),
-
+        document.getElementById("newPane"), 
     space:
-        document.getElementById(
-            "newSpace"
-        ),
-
+        document.getElementById("newSpace"), 
     virtual:
-        document.getElementById(
-            "newVirtual"
-        ),
-
+        document.getElementById("newVirtual"), 
     range:
-        document.getElementById(
-            "newRange"
-        ),
-
+        document.getElementById("newRange"), 
     lines:
         newLines,
-
     statuses:
         newStatuses,
-
     changedLines:
         newChangedLines,
-
     width:
         newWidth,
-
     renderStart:
         -1,
-
     renderEnd:
         -1,
-
     lastFocus:
         null,
-
     suppressSync:
         false,
 };
-
-
-/* =========================================================
-   DISPLAY MODE
+/* ========================================================= DISPLAY MODE
    ========================================================= */
-
 function showingUnchanged() {
-
-    return (
-        showUnchangedCheckbox.checked
-    );
+    return (showUnchangedCheckbox.checked);
 }
-
-
-function displayCount(
-    state
-) {
-
-    if (
-        showingUnchanged()
-    ) {
-
+function displayCount(state) {
+    if (showingUnchanged()) {
         return state.lines.length;
     }
-
     return state.changedLines.length;
 }
-
-
-function actualLineAtDisplayIndex(
-    state,
-    index
-) {
-
-    if (
-        showingUnchanged()
-    ) {
-
+function actualLineAtDisplayIndex(state, index) {
+    if (showingUnchanged()) {
         return index + 1;
     }
-
-    return state.changedLines[
-        index
-    ];
+    return state.changedLines[index];
 }
-
-
-/* =========================================================
-   BINARY SEARCH
-
+/* ========================================================= BINARY SEARCH
    Used when unchanged lines are hidden.
    ========================================================= */
-
-function nearestChangedIndex(
-    changedLines,
-    actualLine
-) {
-
-    if (
-        !changedLines.length
-    ) {
-
+function nearestChangedIndex(changedLines, actualLine) {
+    if (!changedLines.length) {
         return 0;
     }
-
-
     let low = 0;
-
-    let high =
-        changedLines.length - 1;
-
-
-    while (
-        low <= high
-    ) {
-
-        const middle =
-            Math.floor(
-                (
-                    low
-                    +
-                    high
-                )
-                /
-                2
-            );
-
-
-        const value =
-            changedLines[
-                middle
-            ];
-
-
-        if (
-            value === actualLine
-        ) {
-
+    let high = changedLines.length - 1;
+    while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        const value = changedLines[middle];
+        if (value === actualLine) {
             return middle;
         }
-
-
-        if (
-            value < actualLine
-        ) {
-
-            low =
-                middle + 1;
+        if (value < actualLine) {
+            low = middle + 1;
         }
-
         else {
-
-            high =
-                middle - 1;
+            high = middle - 1;
         }
     }
-
-
-    if (
-        low <= 0
-    ) {
-
+    if (low <= 0) {
         return 0;
     }
-
-
-    if (
-        low >=
-        changedLines.length
-    ) {
-
-        return (
-            changedLines.length - 1
-        );
+    if (low >= changedLines.length) {
+        return (changedLines.length - 1);
     }
-
-
-    const before =
-        changedLines[
-            low - 1
-        ];
-
-
-    const after =
-        changedLines[
-            low
-        ];
-
-
-    if (
-        Math.abs(
-            actualLine
-            -
-            before
-        )
-        <=
-        Math.abs(
-            after
-            -
-            actualLine
-        )
-    ) {
-
+    const before = changedLines[low - 1];
+    const after = changedLines[low];
+    if (Math.abs(actualLine - before) <= Math.abs(after - actualLine)) {
         return low - 1;
     }
-
-
     return low;
 }
-
-
-function displayIndexForActualLine(
-    state,
-    actualLine
-) {
-
-    if (
-        !actualLine
-    ) {
-
+function displayIndexForActualLine(state, actualLine) {
+    if (!actualLine) {
         return 0;
     }
-
-
-    if (
-        showingUnchanged()
-    ) {
-
-        return Math.max(
-            0,
-
-            Math.min(
-                state.lines.length - 1,
-                actualLine - 1
-            )
-        );
+    if (showingUnchanged()) {
+        return Math.max(0, Math.min(state.lines.length - 1, actualLine - 1));
     }
-
-
-    return nearestChangedIndex(
-        state.changedLines,
-        actualLine
-    );
+    return nearestChangedIndex(state.changedLines, actualLine);
 }
-
-
-/* =========================================================
-   CURRENT FOCUS LINE
+/* ========================================================= CURRENT FOCUS LINE
    ========================================================= */
-
-function focusLineForState(
-    state
-) {
-
-    if (
-        currentChange < 0
-        ||
-        currentChange >= changes.length
-    ) {
-
+function focusLineForState(state) {
+    if (currentChange < 0 || currentChange >= changes.length) {
         return null;
     }
-
-
-    const change =
-        changes[
-            currentChange
-        ];
-
-
-    if (
-        state.side === "old"
-    ) {
-
+    const change = changes[currentChange];
+    if (state.side === "old") {
         return change.old;
     }
-
-
     return change.new;
 }
-
-
-/* =========================================================
-   SCROLL SPACE SIZE
+/* ========================================================= SCROLL SPACE SIZE
    ========================================================= */
-
-function configureScrollSpace(
-    state
-) {
-
-    const count =
-        displayCount(
-            state
-        );
-
-
-    const height =
-        Math.max(
-            state.pane.clientHeight,
-            count * LINE_HEIGHT
-        );
-
-
-    const width =
-        Math.max(
-            state.pane.clientWidth,
-            state.width
-        );
-
-
-    state.space.style.height =
-        height
+function configureScrollSpace(state) {
+    const count = displayCount(state);
+    const height = Math.max(state.pane.clientHeight, count * LINE_HEIGHT);
+    const width = Math.max(state.pane.clientWidth, state.width);
+    state.space.style.height = height
         +
         "px";
-
-
-    state.space.style.width =
-        width
+    state.space.style.width = width
         +
         "px";
-
-
-    state.virtual.style.width =
-        width
+    state.virtual.style.width = width
         +
         "px";
 }
-
-
-/* =========================================================
-   RANGE LABEL
+/* ========================================================= RANGE LABEL
    ========================================================= */
-
-function updateRangeLabel(
-    state
-) {
-
-    const count =
-        displayCount(
-            state
-        );
-
-
-    if (
-        count <= 0
-    ) {
-
-        state.range.textContent =
-            "no reportable lines";
-
+function updateRangeLabel(state) {
+    const count = displayCount(state);
+    if (count <= 0) {
+        state.range.textContent = "no reportable lines";
         return;
     }
-
-
     const firstIndex =
-        Math.max(
-            0,
-
-            Math.min(
-                count - 1,
-
-                Math.floor(
-                    state.pane.scrollTop
-                    /
-                    LINE_HEIGHT
-                )
-            )
-        );
-
-
-    const visibleRows =
-        Math.max(
-            1,
-
-            Math.ceil(
-                state.pane.clientHeight
-                /
-                LINE_HEIGHT
-            )
-        );
-
-
-    const lastIndex =
-        Math.min(
-            count - 1,
-            firstIndex + visibleRows - 1
-        );
-
-
-    const firstActual =
-        actualLineAtDisplayIndex(
-            state,
-            firstIndex
-        );
-
-
-    const lastActual =
-        actualLineAtDisplayIndex(
-            state,
-            lastIndex
-        );
-
-
-    if (
-        showingUnchanged()
-    ) {
-
-        state.range.textContent =
-            "lines "
+        Math.max(0, Math.min(count - 1, Math.floor(state.pane.scrollTop / LINE_HEIGHT)));
+    const visibleRows = Math.max(1, Math.ceil(state.pane.clientHeight / LINE_HEIGHT));
+    const lastIndex = Math.min(count - 1, firstIndex + visibleRows - 1);
+    const firstActual = actualLineAtDisplayIndex(state, firstIndex);
+    const lastActual = actualLineAtDisplayIndex(state, lastIndex);
+    if (showingUnchanged()) {
+        state.range.textContent = "lines "
             +
             firstActual
             +
@@ -1277,144 +811,43 @@ function updateRangeLabel(
             +
             state.lines.length;
     }
-
     else {
-
-        state.range.textContent =
-            "changes only · "
+        state.range.textContent = "changes only · "
             +
             count
             +
             " lines";
     }
 }
-
-
-/* =========================================================
-   VIRTUAL RENDER
+/* ========================================================= VIRTUAL RENDER
    ========================================================= */
-
-function renderVirtual(
-    state,
-    force
-) {
-
+function renderVirtual(state, force) {
     /*
     Do not replace DOM while the user is actively selecting
     XML text.
     */
-    if (
-        selectingText
-    ) {
-
+    if (selectingText) {
         return;
     }
-
-
-    configureScrollSpace(
-        state
-    );
-
-
-    const count =
-        displayCount(
-            state
-        );
-
-
-    updateRangeLabel(
-        state
-    );
-
-
-    if (
-        count <= 0
-    ) {
-
+    configureScrollSpace(state);
+    const count = displayCount(state);
+    updateRangeLabel(state);
+    if (count <= 0) {
         state.virtual.replaceChildren();
-
-
-        const message =
-            document.createElement(
-                "div"
-            );
-
-
-        message.className =
-            "empty-message";
-
-
-        message.textContent =
-            "No reportable lines in this pane.";
-
-
-        state.virtual.appendChild(
-            message
-        );
-
-
-        state.virtual.style.transform =
-            "translateY(0px)";
-
-
-        state.renderStart =
-            0;
-
-        state.renderEnd =
-            0;
-
+        const message = document.createElement("div");
+        message.className = "empty-message";
+        message.textContent = "No reportable lines in this pane.";
+        state.virtual.appendChild(message);
+        state.virtual.style.transform = "translateY(0px)";
+        state.renderStart = 0;
+        state.renderEnd = 0;
         return;
     }
-
-
-    const firstVisible =
-        Math.max(
-            0,
-
-            Math.floor(
-                state.pane.scrollTop
-                /
-                LINE_HEIGHT
-            )
-        );
-
-
-    const visibleRows =
-        Math.max(
-            1,
-
-            Math.ceil(
-                state.pane.clientHeight
-                /
-                LINE_HEIGHT
-            )
-        );
-
-
-    const start =
-        Math.max(
-            0,
-            firstVisible - BUFFER_LINES
-        );
-
-
-    const end =
-        Math.min(
-            count,
-            firstVisible
-            +
-            visibleRows
-            +
-            BUFFER_LINES
-        );
-
-
-    const focusLine =
-        focusLineForState(
-            state
-        );
-
-
+    const firstVisible = Math.max(0, Math.floor(state.pane.scrollTop / LINE_HEIGHT));
+    const visibleRows = Math.max(1, Math.ceil(state.pane.clientHeight / LINE_HEIGHT));
+    const start = Math.max(0, firstVisible - BUFFER_LINES);
+    const end = Math.min(count, firstVisible + visibleRows + BUFFER_LINES);
+    const focusLine = focusLineForState(state);
     if (
         !force
         &&
@@ -1424,143 +857,43 @@ function renderVirtual(
         &&
         focusLine === state.lastFocus
     ) {
-
         return;
     }
-
-
-    state.renderStart =
-        start;
-
-    state.renderEnd =
-        end;
-
-    state.lastFocus =
-        focusLine;
-
-
-    const fragment =
-        document.createDocumentFragment();
-
-
-    for (
-        let displayIndex = start;
-        displayIndex < end;
-        displayIndex++
-    ) {
-
-        const actualLine =
-            actualLineAtDisplayIndex(
-                state,
-                displayIndex
-            );
-
-
-        if (
-            !actualLine
-        ) {
-
+    state.renderStart = start;
+    state.renderEnd = end;
+    state.lastFocus = focusLine;
+    const fragment = document.createDocumentFragment();
+    for (let displayIndex = start; displayIndex < end; displayIndex++) {
+        const actualLine = actualLineAtDisplayIndex(state, displayIndex);
+        if (!actualLine) {
             continue;
         }
-
-
-        const row =
-            document.createElement(
-                "div"
-            );
-
-
-        row.className =
-            "line";
-
-
-        row.id =
-            state.side
+        const row = document.createElement("div");
+        row.className = "line";
+        row.id = state.side
             +
             "-L"
             +
             actualLine;
-
-
-        const status =
-            state.statuses[
-                String(actualLine)
-            ];
-
-
-        if (
-            status
-        ) {
-
-            row.classList.add(
-                status.toLowerCase()
-            );
+        const status = state.statuses[String(actualLine)];
+        if (status) {
+            row.classList.add(status.toLowerCase());
         }
-
-
-        if (
-            actualLine === focusLine
-        ) {
-
-            row.classList.add(
-                "focused"
-            );
+        if (actualLine === focusLine) {
+            row.classList.add("focused");
         }
-
-
-        const number =
-            document.createElement(
-                "span"
-            );
-
-
-        number.className =
-            "line-number";
-
-
-        number.textContent =
-            actualLine;
-
-
-        const text =
-            document.createElement(
-                "span"
-            );
-
-
-        text.className =
-            "xml-text";
-
-
-        text.textContent =
-            state.lines[
-                actualLine - 1
-            ];
-
-
-        row.appendChild(
-            number
-        );
-
-
-        row.appendChild(
-            text
-        );
-
-
-        fragment.appendChild(
-            row
-        );
+        const number = document.createElement("span");
+        number.className = "line-number";
+        number.textContent = actualLine;
+        const text = document.createElement("span");
+        text.className = "xml-text";
+        text.textContent = state.lines[actualLine - 1];
+        row.appendChild(number);
+        row.appendChild(text);
+        fragment.appendChild(row);
     }
-
-
-    state.virtual.replaceChildren(
-        fragment
-    );
-
-
-    state.virtual.style.transform =
-        "translateY("
+    state.virtual.replaceChildren(fragment);
+    state.virtual.style.transform = "translateY("
         +
         (
             start
@@ -1570,88 +903,38 @@ function renderVirtual(
         +
         "px)";
 }
-
-
-/* =========================================================
-   RENDER SCHEDULING
+/* ========================================================= RENDER SCHEDULING
    ========================================================= */
-
 let oldRenderFrame = null;
-
 let newRenderFrame = null;
-
-
-function scheduleRender(
-    state
-) {
-
-    if (
-        selectingText
-    ) {
-
+function scheduleRender(state) {
+    if (selectingText) {
         return;
     }
-
-
-    if (
-        state.side === "old"
-    ) {
-
-        if (
-            oldRenderFrame !== null
-        ) {
-
+    if (state.side === "old") {
+        if (oldRenderFrame !== null) {
             return;
         }
-
-
-        oldRenderFrame =
-            requestAnimationFrame(
+        oldRenderFrame = requestAnimationFrame(
                 function() {
-
-                    oldRenderFrame =
-                        null;
-
-
-                    renderVirtual(
-                        oldState,
-                        false
-                    );
+                    oldRenderFrame = null;
+                    renderVirtual(oldState, false);
                 }
             );
     }
-
     else {
-
-        if (
-            newRenderFrame !== null
-        ) {
-
+        if (newRenderFrame !== null) {
             return;
         }
-
-
-        newRenderFrame =
-            requestAnimationFrame(
+        newRenderFrame = requestAnimationFrame(
                 function() {
-
-                    newRenderFrame =
-                        null;
-
-
-                    renderVirtual(
-                        newState,
-                        false
-                    );
+                    newRenderFrame = null;
+                    renderVirtual(newState, false);
                 }
             );
     }
 }
-
-
-/* =========================================================
-   SCROLL SYNCHRONISATION
-
+/* ========================================================= SCROLL SYNCHRONISATION
    Handles:
        mouse wheel
        touchpad
@@ -1660,671 +943,215 @@ function scheduleRender(
        PageUp/PageDown
        keyboard scrolling
    ========================================================= */
-
 function performPendingSync() {
-
-    pendingSyncFrame =
-        null;
-
-
-    const source =
-        pendingSyncSource;
-
-
-    const target =
-        pendingSyncTarget;
-
-
-    pendingSyncSource =
-        null;
-
-
-    pendingSyncTarget =
-        null;
-
-
-    if (
-        !source
-        ||
-        !target
-        ||
-        !syncScrollCheckbox.checked
-        ||
-        selectingText
-    ) {
-
+    pendingSyncFrame = null;
+    const source = pendingSyncSource;
+    const target = pendingSyncTarget;
+    pendingSyncSource = null;
+    pendingSyncTarget = null;
+    if (!source || !target || !syncScrollCheckbox.checked || selectingText) {
         return;
     }
-
-
-    const sourceVerticalRange =
-        Math.max(
-            0,
-            source.pane.scrollHeight
-            -
-            source.pane.clientHeight
-        );
-
-
-    const targetVerticalRange =
-        Math.max(
-            0,
-            target.pane.scrollHeight
-            -
-            target.pane.clientHeight
-        );
-
-
-    const sourceHorizontalRange =
-        Math.max(
-            0,
-            source.pane.scrollWidth
-            -
-            source.pane.clientWidth
-        );
-
-
-    const targetHorizontalRange =
-        Math.max(
-            0,
-            target.pane.scrollWidth
-            -
-            target.pane.clientWidth
-        );
-
-
+    const sourceVerticalRange = Math.max(0, source.pane.scrollHeight - source.pane.clientHeight);
+    const targetVerticalRange = Math.max(0, target.pane.scrollHeight - target.pane.clientHeight);
+    const sourceHorizontalRange = Math.max(0, source.pane.scrollWidth - source.pane.clientWidth);
+    const targetHorizontalRange = Math.max(0, target.pane.scrollWidth - target.pane.clientWidth);
     let targetTop = 0;
-
-
-    if (
-        sourceVerticalRange > 0
-        &&
-        targetVerticalRange > 0
-    ) {
-
-        targetTop =
-            (
-                source.pane.scrollTop
-                /
-                sourceVerticalRange
-            )
+    if (sourceVerticalRange > 0 && targetVerticalRange > 0) {
+        targetTop = (source.pane.scrollTop / sourceVerticalRange)
             *
             targetVerticalRange;
     }
-
-
     let targetLeft = 0;
-
-
-    if (
-        sourceHorizontalRange > 0
-        &&
-        targetHorizontalRange > 0
-    ) {
-
-        targetLeft =
-            (
-                source.pane.scrollLeft
-                /
-                sourceHorizontalRange
-            )
+    if (sourceHorizontalRange > 0 && targetHorizontalRange > 0) {
+        targetLeft = (source.pane.scrollLeft / sourceHorizontalRange)
             *
             targetHorizontalRange;
     }
-
-
-    target.suppressSync =
-        true;
-
-
-    target.pane.scrollTop =
-        targetTop;
-
-
-    target.pane.scrollLeft =
-        targetLeft;
-
-
-    scheduleRender(
-        target
-    );
-
-
-    requestAnimationFrame(
-        function() {
-
-            target.suppressSync =
-                false;
-        }
-    );
+    target.suppressSync = true;
+    target.pane.scrollTop = targetTop;
+    target.pane.scrollLeft = targetLeft;
+    scheduleRender(target);
+    requestAnimationFrame(function() { target.suppressSync = false; });
 }
-
-
-function scheduleSync(
-    source,
-    target
-) {
-
-    if (
-        !syncScrollCheckbox.checked
-        ||
-        selectingText
-    ) {
-
+function scheduleSync(source, target) {
+    if (!syncScrollCheckbox.checked || selectingText) {
         return;
     }
-
-
-    pendingSyncSource =
-        source;
-
-
-    pendingSyncTarget =
-        target;
-
-
-    if (
-        pendingSyncFrame !== null
-    ) {
-
+    pendingSyncSource = source;
+    pendingSyncTarget = target;
+    if (pendingSyncFrame !== null) {
         return;
     }
-
-
-    pendingSyncFrame =
-        requestAnimationFrame(
-            performPendingSync
-        );
+    pendingSyncFrame = requestAnimationFrame(performPendingSync);
 }
-
-
-/* =========================================================
-   SCROLL EVENTS
+/* ========================================================= SCROLL EVENTS
    ========================================================= */
-
-function handlePaneScroll(
-    source,
-    target
-) {
-
-    scheduleRender(
-        source
-    );
-
-
-    if (
-        source.suppressSync
-    ) {
-
+function handlePaneScroll(source, target) {
+    scheduleRender(source);
+    if (source.suppressSync) {
         return;
     }
-
-
-    scheduleSync(
-        source,
-        target
-    );
+    scheduleSync(source, target);
 }
-
-
 oldState.pane.addEventListener(
     "scroll",
     function() {
-
-        handlePaneScroll(
-            oldState,
-            newState
-        );
+        handlePaneScroll(oldState, newState);
     },
     {
         passive: true
     }
 );
-
-
 newState.pane.addEventListener(
     "scroll",
     function() {
-
-        handlePaneScroll(
-            newState,
-            oldState
-        );
+        handlePaneScroll(newState, oldState);
     },
     {
         passive: true
     }
 );
-
-
-/* =========================================================
-   TEXT SELECTION
-
+/* ========================================================= TEXT SELECTION
    Only clicking directly on XML text pauses sync.
-
    Clicking/dragging scrollbar DOES NOT pause sync.
    ========================================================= */
-
-function startPossibleSelection(
-    event
-) {
-
-    if (
-        event.button !== 0
-    ) {
-
+function startPossibleSelection(event) {
+    if (event.button !== 0) {
         return;
     }
-
-
-    const target =
-        event.target;
-
-
-    if (
-        target
-        &&
-        target.classList
-        &&
-        target.classList.contains(
-            "xml-text"
-        )
-    ) {
-
-        selectingText =
-            true;
-
-
-        syncStatus.textContent =
-            "Sync paused while selecting";
+    const target = event.target;
+    if (target && target.classList && target.classList.contains("xml-text")) {
+        selectingText = true;
+        syncStatus.textContent = "Sync paused while selecting";
     }
 }
-
-
 function stopSelection() {
-
-    if (
-        !selectingText
-    ) {
-
+    if (!selectingText) {
         return;
     }
-
-
-    selectingText =
-        false;
-
-
-    syncStatus.textContent =
-        (
-            syncScrollCheckbox.checked
-            ?
-            "Sync on"
-            :
-            "Sync off"
-        );
-
-
-    renderVirtual(
-        oldState,
-        true
-    );
-
-
-    renderVirtual(
-        newState,
-        true
-    );
+    selectingText = false;
+    syncStatus.textContent = (syncScrollCheckbox.checked ? "Sync on" : "Sync off");
+    renderVirtual(oldState, true);
+    renderVirtual(newState, true);
 }
-
-
-oldState.pane.addEventListener(
-    "mousedown",
-    startPossibleSelection
-);
-
-
-newState.pane.addEventListener(
-    "mousedown",
-    startPossibleSelection
-);
-
-
-document.addEventListener(
-    "mouseup",
-    stopSelection
-);
-
-
-window.addEventListener(
-    "blur",
-    stopSelection
-);
-
-
-/* =========================================================
-   PANE FOCUS
+oldState.pane.addEventListener("mousedown", startPossibleSelection);
+newState.pane.addEventListener("mousedown", startPossibleSelection);
+document.addEventListener("mouseup", stopSelection);
+window.addEventListener("blur", stopSelection);
+/* ========================================================= PANE FOCUS
    ========================================================= */
-
 oldState.pane.addEventListener(
     "mousedown",
     function() {
-
-        oldState.pane.focus(
-            {
-                preventScroll: true
-            }
-        );
+        oldState.pane.focus({ preventScroll: true });
     }
 );
-
-
 newState.pane.addEventListener(
     "mousedown",
     function() {
-
-        newState.pane.focus(
-            {
-                preventScroll: true
-            }
-        );
+        newState.pane.focus({ preventScroll: true });
     }
 );
-
-
-/* =========================================================
-   CORRESPONDING LINE
-
+/* ========================================================= CORRESPONDING LINE
    Converts a line's relative position from one file into
    the other file.
-
    Used when a line exists only in OLD or only in NEW.
    ========================================================= */
-
-function correspondingLine(
-    sourceLine,
-    sourceCount,
-    targetCount
-) {
-
-    if (
-        !sourceLine
-        ||
-        sourceCount <= 1
-        ||
-        targetCount <= 0
-    ) {
-
+function correspondingLine(sourceLine, sourceCount, targetCount) {
+    if (!sourceLine || sourceCount <= 1 || targetCount <= 0) {
         return null;
     }
-
-
-    const fraction =
-        (
-            sourceLine - 1
-        )
+    const fraction = (sourceLine - 1)
         /
-        (
-            sourceCount - 1
-        );
-
-
+        (sourceCount - 1);
     return Math.max(
         1,
-
         Math.min(
             targetCount,
-
             Math.round(
                 fraction
                 *
-                (
-                    targetCount - 1
-                )
+                (targetCount - 1)
             )
             +
             1
         )
     );
 }
-
-
-/* =========================================================
-   SCROLL TO ACTUAL XML LINE
+/* ========================================================= SCROLL TO ACTUAL XML LINE
    ========================================================= */
-
-function scrollToActualLine(
-    state,
-    actualLine
-) {
-
-    if (
-        !actualLine
-    ) {
-
+function scrollToActualLine(state, actualLine) {
+    if (!actualLine) {
         return;
     }
-
-
-    configureScrollSpace(
-        state
-    );
-
-
-    const count =
-        displayCount(
-            state
-        );
-
-
-    if (
-        count <= 0
-    ) {
-
+    configureScrollSpace(state);
+    const count = displayCount(state);
+    if (count <= 0) {
         return;
     }
-
-
-    const displayIndex =
-        displayIndexForActualLine(
-            state,
-            actualLine
-        );
-
-
-    let top =
-        (
+    const displayIndex = displayIndexForActualLine(state, actualLine);
+    let top = (
             displayIndex
             *
             LINE_HEIGHT
         )
         -
-        (
-            state.pane.clientHeight
-            /
-            2
-        )
+        (state.pane.clientHeight / 2)
         +
-        (
-            LINE_HEIGHT
-            /
-            2
-        );
-
-
-    const maxTop =
-        Math.max(
-            0,
-            state.pane.scrollHeight
-            -
-            state.pane.clientHeight
-        );
-
-
-    top =
-        Math.max(
-            0,
-
-            Math.min(
-                maxTop,
-                top
-            )
-        );
-
-
-    state.suppressSync =
-        true;
-
-
-    state.pane.scrollTop =
-        top;
-
-
-    requestAnimationFrame(
-        function() {
-
-            state.suppressSync =
-                false;
-        }
-    );
+        (LINE_HEIGHT / 2);
+    const maxTop = Math.max(0, state.pane.scrollHeight - state.pane.clientHeight);
+    top = Math.max(0, Math.min(maxTop, top));
+    state.suppressSync = true;
+    state.pane.scrollTop = top;
+    requestAnimationFrame(function() { state.suppressSync = false; });
 }
-
-
-/* =========================================================
-   CHANGE NAVIGATION
-
+/* ========================================================= CHANGE NAVIGATION
    IMPORTANT:
-
    The changes array is generated by Python in NEW-document
    top-to-bottom order.
-
    Therefore Right Arrow / Next Change moves consistently
    downward through NEW.
-
    Removed items have no NEW line, so Python gives them a
    position corresponding to their OLD relative location.
    ========================================================= */
-
-function goToChange(
-    index
-) {
-
-    if (
-        !changes.length
-    ) {
-
+function goToChange(index) {
+    if (!changes.length) {
         return;
     }
-
-
-    currentChange =
-        (
-            index
-            +
-            changes.length
-        )
+    currentChange = (index + changes.length)
         %
         changes.length;
-
-
-    const change =
-        changes[
-            currentChange
-        ];
-
-
-    let oldTarget =
-        change.old;
-
-
-    let newTarget =
-        change.new;
-
-
+    const change = changes[currentChange];
+    let oldTarget = change.old;
+    let newTarget = change.new;
     /*
     Added item:
     exact line exists only in NEW.
     */
-
-    if (
-        !oldTarget
-        &&
-        newTarget
-    ) {
-
-        oldTarget =
-            correspondingLine(
-                newTarget,
-                newLines.length,
-                oldLines.length
-            );
+    if (!oldTarget && newTarget) {
+        oldTarget = correspondingLine(newTarget, newLines.length, oldLines.length);
     }
-
-
     /*
     Removed item:
     exact line exists only in OLD.
-
     Use the same NEW-side navigation location that Python
     used when sorting the change list.
     */
-
-    if (
-        !newTarget
-        &&
-        change.navNew
-    ) {
-
-        newTarget =
-            change.navNew;
+    if (!newTarget && change.navNew) {
+        newTarget = change.navNew;
     }
-
-
     /*
     Fallback in case an older report does not contain navNew.
     */
-
-    if (
-        !newTarget
-        &&
-        oldTarget
-    ) {
-
-        newTarget =
-            correspondingLine(
-                oldTarget,
-                oldLines.length,
-                newLines.length
-            );
+    if (!newTarget && oldTarget) {
+        newTarget = correspondingLine(oldTarget, oldLines.length, newLines.length);
     }
-
-
-    scrollToActualLine(
-        oldState,
-        oldTarget
-    );
-
-
-    scrollToActualLine(
-        newState,
-        newTarget
-    );
-
-
-    renderVirtual(
-        oldState,
-        true
-    );
-
-
-    renderVirtual(
-        newState,
-        true
-    );
-
-
-    changeInfo.textContent =
-        (currentChange + 1)
+    scrollToActualLine(oldState, oldTarget);
+    scrollToActualLine(newState, newTarget);
+    renderVirtual(oldState, true);
+    renderVirtual(newState, true);
+    changeInfo.textContent = (currentChange + 1)
         +
         " / "
         +
@@ -2338,291 +1165,106 @@ function goToChange(
         +
         change.key;
 }
-
-
 function nextChange() {
-
-    goToChange(
-        currentChange + 1
-    );
+    goToChange(currentChange + 1);
 }
-
-
 function previousChange() {
-
-    goToChange(
-        currentChange - 1
-    );
+    goToChange(currentChange - 1);
 }
-
-
-/* =========================================================
-   SHOW / HIDE UNCHANGED
+/* ========================================================= SHOW / HIDE UNCHANGED
    ========================================================= */
-
-function actualLineAtPaneCentre(
-    state
-) {
-
-    const count =
-        displayCount(
-            state
-        );
-
-
-    if (
-        count <= 0
-    ) {
-
+function actualLineAtPaneCentre(state) {
+    const count = displayCount(state);
+    if (count <= 0) {
         return 1;
     }
-
-
-    const centreIndex =
-        Math.max(
+    const centreIndex = Math.max(
             0,
-
             Math.min(
                 count - 1,
-
-                Math.floor(
-                    (
-                        state.pane.scrollTop
-                        +
-                        state.pane.clientHeight
-                        /
-                        2
-                    )
-                    /
-                    LINE_HEIGHT
-                )
+                Math.floor((state.pane.scrollTop + state.pane.clientHeight / 2) / LINE_HEIGHT)
             )
         );
-
-
-    return actualLineAtDisplayIndex(
-        state,
-        centreIndex
-    );
+    return actualLineAtDisplayIndex(state, centreIndex);
 }
-
-
 showUnchangedCheckbox.addEventListener(
     "change",
     function() {
-
         /*
         Preserve approximately the same XML location when
         changing between full-document and changes-only mode.
         */
-
-        const oldCentre =
-            actualLineAtPaneCentre(
-                oldState
-            );
-
-
-        const newCentre =
-            actualLineAtPaneCentre(
-                newState
-            );
-
-
-        oldState.renderStart =
-            -1;
-
-        oldState.renderEnd =
-            -1;
-
-        newState.renderStart =
-            -1;
-
-        newState.renderEnd =
-            -1;
-
-
-        configureScrollSpace(
-            oldState
-        );
-
-
-        configureScrollSpace(
-            newState
-        );
-
-
-        scrollToActualLine(
-            oldState,
-            oldCentre
-        );
-
-
-        scrollToActualLine(
-            newState,
-            newCentre
-        );
-
-
-        renderVirtual(
-            oldState,
-            true
-        );
-
-
-        renderVirtual(
-            newState,
-            true
-        );
+        const oldCentre = actualLineAtPaneCentre(oldState);
+        const newCentre = actualLineAtPaneCentre(newState);
+        oldState.renderStart = -1;
+        oldState.renderEnd = -1;
+        newState.renderStart = -1;
+        newState.renderEnd = -1;
+        configureScrollSpace(oldState);
+        configureScrollSpace(newState);
+        scrollToActualLine(oldState, oldCentre);
+        scrollToActualLine(newState, newCentre);
+        renderVirtual(oldState, true);
+        renderVirtual(newState, true);
     }
 );
-
-
-/* =========================================================
-   SYNC CHECKBOX
+/* ========================================================= SYNC CHECKBOX
    ========================================================= */
-
 syncScrollCheckbox.addEventListener(
     "change",
     function() {
-
-        if (
-            syncScrollCheckbox.checked
-        ) {
-
-            syncStatus.textContent =
-                "Sync on";
-
-
-            scheduleSync(
-                oldState,
-                newState
-            );
+        if (syncScrollCheckbox.checked) {
+            syncStatus.textContent = "Sync on";
+            scheduleSync(oldState, newState);
         }
-
         else {
-
-            syncStatus.textContent =
-                "Sync off";
+            syncStatus.textContent = "Sync off";
         }
     }
 );
-
-
-/* =========================================================
-   KEYBOARD
-
+/* ========================================================= KEYBOARD
    ← Previous change
    → Next change
-
    ↑ ↓ PageUp PageDown remain ordinary scrolling.
    ========================================================= */
-
 document.addEventListener(
     "keydown",
     function(event) {
-
-        if (
-            event.ctrlKey
-            ||
-            event.altKey
-            ||
-            event.metaKey
-        ) {
-
+        if (event.ctrlKey || event.altKey || event.metaKey) {
             return;
         }
-
-
-        if (
-            event.key === "ArrowRight"
-        ) {
-
+        if (event.key === "ArrowRight") {
             event.preventDefault();
-
             nextChange();
         }
-
-
-        else if (
-            event.key === "ArrowLeft"
-        ) {
-
+        else if (event.key === "ArrowLeft") {
             event.preventDefault();
-
             previousChange();
         }
     }
 );
-
-
-/* =========================================================
-   RESIZE
+/* ========================================================= RESIZE
    ========================================================= */
-
 window.addEventListener(
     "resize",
     function() {
-
-        oldState.renderStart =
-            -1;
-
-        oldState.renderEnd =
-            -1;
-
-        newState.renderStart =
-            -1;
-
-        newState.renderEnd =
-            -1;
-
-
-        renderVirtual(
-            oldState,
-            true
-        );
-
-
-        renderVirtual(
-            newState,
-            true
-        );
+        oldState.renderStart = -1;
+        oldState.renderEnd = -1;
+        newState.renderStart = -1;
+        newState.renderEnd = -1;
+        renderVirtual(oldState, true);
+        renderVirtual(newState, true);
     }
 );
-
-
-/* =========================================================
-   INITIAL DISPLAY
+/* ========================================================= INITIAL DISPLAY
    ========================================================= */
-
-configureScrollSpace(
-    oldState
-);
-
-
-configureScrollSpace(
-    newState
-);
-
-
-renderVirtual(
-    oldState,
-    true
-);
-
-
-renderVirtual(
-    newState,
-    true
-);
-
-
-if (
-    changes.length
-) {
-
+configureScrollSpace(oldState);
+configureScrollSpace(newState);
+renderVirtual(oldState, true);
+renderVirtual(newState, true);
+if (changes.length) {
     goToChange(0);
 }
-
 </script>
 
 
@@ -2632,46 +1274,28 @@ if (
 """
 )
 
-
 # ============================================================
 # BUILD FILE REPORT
 # ============================================================
 
-def file_report_html(
-    item,
-    back_href,
-):
+def file_report_html(item, back_href):
     filename = item["file"]
 
-    old_text = item.get(
-        "old_text"
-    )
+    old_text = item.get('old_text')
 
-    new_text = item.get(
-        "new_text"
-    )
+    new_text = item.get('new_text')
 
     if old_text is None:
-        old_text = read_xml_text(
-            item.get("old_path")
-        )
+        old_text = read_xml_text(item.get('old_path'))
 
     if new_text is None:
-        new_text = read_xml_text(
-            item.get("new_path")
-        )
+        new_text = read_xml_text(item.get('new_path'))
 
-    differences = item[
-        "differences"
-    ]
+    differences = item['differences']
 
-    old_lines = (
-        old_text.splitlines()
-    )
+    old_lines = old_text.splitlines()
 
-    new_lines = (
-        new_text.splitlines()
-    )
+    new_lines = new_text.splitlines()
 
     (
         old_status,
@@ -2685,29 +1309,15 @@ def file_report_html(
         ),
     )
 
-    changed = sum(
-        row["Status"] == "Changed"
-        for row in differences
-    )
+    changed = sum((row['Status'] == 'Changed' for row in differences))
 
-    added = sum(
-        row["Status"] == "Added"
-        for row in differences
-    )
+    added = sum((row['Status'] == 'Added' for row in differences))
 
-    removed = sum(
-        row["Status"] == "Removed"
-        for row in differences
-    )
+    removed = sum((row['Status'] == 'Removed' for row in differences))
 
-    old_line_count = len(
-        old_lines
-    )
+    old_line_count = len(old_lines)
 
-    new_line_count = len(
-        new_lines
-    )
-
+    new_line_count = len(new_lines)
 
     # ========================================================
     # NEW-DOCUMENT NAVIGATION POSITION
@@ -2727,9 +1337,7 @@ def file_report_html(
     # This prevents Next Change from jumping down/up/down.
     # ========================================================
 
-    def estimated_new_line_from_old(
-        old_line,
-    ):
+    def estimated_new_line_from_old(old_line):
         if old_line is None:
             return None
 
@@ -2739,50 +1347,24 @@ def file_report_html(
         if old_line_count <= 1:
             return 1.0
 
-        relative_position = (
-            old_line - 1
-        ) / (
-            old_line_count - 1
-        )
+        relative_position = (old_line - 1) / (old_line_count - 1)
 
-        estimated_new_line = (
-            relative_position
-            *
-            max(
-                0,
-                new_line_count - 1
-            )
-            +
-            1
-        )
+        estimated_new_line = relative_position * max(0, new_line_count - 1) + 1
 
         return estimated_new_line
 
+    def navigation_position(row):
+        new_line = row.get('New Line')
 
-    def navigation_position(
-        row,
-    ):
-        new_line = row.get(
-            "New Line"
-        )
-
-        old_line = row.get(
-            "Old Line"
-        )
+        old_line = row.get('Old Line')
 
         # Actual NEW line always wins.
         if new_line is not None:
-            return float(
-                new_line
-            )
+            return float(new_line)
 
         # Removed item:
         # map OLD location into NEW coordinate system.
-        estimated_new = (
-            estimated_new_line_from_old(
-                old_line
-            )
-        )
+        estimated_new = estimated_new_line_from_old(old_line)
 
         if estimated_new is not None:
             return estimated_new
@@ -2790,25 +1372,16 @@ def file_report_html(
         # Entire NEW file absent:
         # fall back to OLD order.
         if old_line is not None:
-            return float(
-                old_line
-            )
+            return float(old_line)
 
-        return float(
-            "inf"
-        )
-
+        return float('inf')
 
     changes = []
 
     for row in differences:
-        old_line = row.get(
-            "Old Line"
-        )
+        old_line = row.get('Old Line')
 
-        new_line = row.get(
-            "New Line"
-        )
+        new_line = row.get('New Line')
 
         nav_new = None
 
@@ -2816,27 +1389,10 @@ def file_report_html(
             nav_new = new_line
 
         elif old_line is not None:
-            estimated = (
-                estimated_new_line_from_old(
-                    old_line
-                )
-            )
+            estimated = estimated_new_line_from_old(old_line)
 
             if estimated is not None:
-                nav_new = max(
-                    1,
-                    min(
-                        max(
-                            1,
-                            new_line_count
-                        ),
-                        int(
-                            round(
-                                estimated
-                            )
-                        ),
-                    )
-                )
+                nav_new = max(1, min(max(1, new_line_count), int(round(estimated))))
 
         changes.append({
 
@@ -2864,7 +1420,6 @@ def file_report_html(
                 ),
         })
 
-
     # ========================================================
     # STRICT TOP -> BOTTOM ORDER IN NEW
     # ========================================================
@@ -2885,44 +1440,19 @@ def file_report_html(
         )
     )
 
-
     for change in changes:
-        change.pop(
-            "_position",
-            None,
-        )
+        change.pop('_position', None)
 
+    old_status_json = {str(key): value for key, value in old_status.items()}
 
-    old_status_json = {
-        str(key): value
-        for key, value
-        in old_status.items()
-    }
-
-
-    new_status_json = {
-        str(key): value
-        for key, value
-        in new_status.items()
-    }
-
+    new_status_json = {str(key): value for key, value in new_status.items()}
 
     # ========================================================
     # SAFE JSON FOR JAVASCRIPT
     # ========================================================
 
     def js_json(value):
-        return (
-            json.dumps(
-                value,
-                ensure_ascii=True,
-            )
-            .replace(
-                "</",
-                "<\\/"
-            )
-        )
-
+        return json.dumps(value, ensure_ascii=True).replace('</', '<\\/')
 
     return FILE_TEMPLATE.safe_substitute(
 
@@ -2969,7 +1499,6 @@ def file_report_html(
             new_lines
         ),
     )
-
 
 # ============================================================
 # MASTER REPORT
@@ -3083,10 +1612,7 @@ $rows
 """
 )
 
-
-def master_report_html(
-    entries,
-):
+def master_report_html(entries):
     rows = []
 
     for entry in entries:
@@ -3121,95 +1647,43 @@ def master_report_html(
             "</tr>"
         )
 
-    return MASTER_TEMPLATE.safe_substitute(
-        rows="\n".join(
-            rows
-        )
-    )
-
+    return MASTER_TEMPLATE.safe_substitute(rows='\n'.join(rows))
 
 # ============================================================
 # GENERATE REPORTS
 # ============================================================
 
-def generate_html_reports(
-    items,
-    output_folder,
-    report_stem,
-):
-    report_folder_name = (
-        f"{report_stem}_files"
-    )
+def generate_html_reports(items, output_folder, report_stem):
+    report_folder_name = f'{report_stem}_files'
 
-    report_folder = os.path.join(
-        output_folder,
-        report_folder_name,
-    )
+    report_folder = os.path.join(output_folder, report_folder_name)
 
-    os.makedirs(
-        report_folder,
-        exist_ok=True,
-    )
+    os.makedirs(report_folder, exist_ok=True)
 
-    master_filename = (
-        f"{report_stem}.html"
-    )
+    master_filename = f'{report_stem}.html'
 
-    back_href = (
-        f"../{master_filename}"
-    )
+    back_href = f'../{master_filename}'
 
     entries = []
 
-    for index, item in enumerate(
-        items,
-        start=1,
-    ):
-        differences = item[
-            "differences"
-        ]
+    for (index, item) in enumerate(items, start=1):
+        differences = item['differences']
 
         if not differences:
             continue
 
-        filename = (
-            f"{index:03d}_"
-            f"{safe_filename(item['file'])}"
-            ".html"
-        )
+        filename = f"{index:03d}_{safe_filename(item['file'])}.html"
 
-        filepath = os.path.join(
-            report_folder,
-            filename,
-        )
+        filepath = os.path.join(report_folder, filename)
 
-        with open(
-            filepath,
-            "w",
-            encoding="utf-8",
-        ) as file:
+        with open(filepath, 'w', encoding='utf-8') as file:
+            file.write(file_report_html(item, back_href))
 
-            file.write(
-                file_report_html(
-                    item,
-                    back_href,
-                )
-            )
+        changed = sum((row['Status'] == 'Changed' for row in differences))
 
-        changed = sum(
-            row["Status"] == "Changed"
-            for row in differences
-        )
+        added = sum((row['Status'] == 'Added' for row in differences))
 
-        added = sum(
-            row["Status"] == "Added"
-            for row in differences
-        )
-
-        removed = sum(
-            row["Status"] == "Removed"
-            for row in differences
-        )
+        removed = sum((row['Status'] == 'Removed' for row in differences))
 
         entries.append({
 
@@ -3237,21 +1711,9 @@ def generate_html_reports(
                 ),
         })
 
-    master_path = os.path.join(
-        output_folder,
-        master_filename,
-    )
+    master_path = os.path.join(output_folder, master_filename)
 
-    with open(
-        master_path,
-        "w",
-        encoding="utf-8",
-    ) as file:
-
-        file.write(
-            master_report_html(
-                entries
-            )
-        )
+    with open(master_path, 'w', encoding='utf-8') as file:
+        file.write(master_report_html(entries))
 
     return master_path
