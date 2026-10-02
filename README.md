@@ -1,84 +1,72 @@
-# CT Protocol Comparison
+# Universal XML Change Detector
 
-A **Python tool** for working with **CT protocol HTML exports**.
+A Python tool for comparing two folders of XML files and reporting meaningful differences.
 
-It supports two workflows:
-
-- **Extract mode**: convert **one HTML file** into a structured **Excel summary**
-- **Compare mode**: compare **two HTML files** (**BEFORE** and **AFTER**) and generate:
-  - a **comparison report**
-  - a highlighted **BEFORE** spreadsheet
-  - a highlighted **AFTER** spreadsheet
-
-The aim is to make CT protocol data **easier to read, filter, review, and compare** than in the original HTML format.
-
----
+The comparison is designed to work with general XML structures rather than a specific XML schema.
 
 ## Features
 
-- Parses **protocol**, **acquisition**, and **result** sections from CT protocol HTML files
-- Converts extracted data into a structured **Excel spreadsheet**
-- Supports **single-file extraction**
-- Supports **two-file comparison**
+- Recursively compares XML files in **OLD** and **NEW** folders.
 - Detects:
-  - **removed rows**
-  - **added rows**
-  - **changed parameter values**
-  - **new parameter headers** that appear only in one file
-- Produces **colour-highlighted Excel outputs** for visual review
-- Automatically **adjusts Excel column widths**
-- Uses a simple **Tkinter pop-up interface** for file selection
+  - Added values
+  - Removed values
+  - Changed values
+  - Added or removed XML files
+- Converts XML content into contextual **path → value** pairs.
+- Handles repeated XML elements by identifying them using their own attributes or child values rather than relying on element position.
+- Treats numerically equivalent values such as `28`, `28.0`, and `28.000` as equal.
+- Produces an Excel report of detected differences.
 
----
+## Versions
+
+### `xml_compare.py`
+
+Basic comparison version.
+
+Uses Python's standard XML parser and produces an Excel report containing:
+
+- Differences
+- Identity rules used for repeated XML elements
+
+### HTML report version
+
+The extended version uses `lxml` together with `html_report.py`.
+
+In addition to the Excel report, it generates a browser-based side-by-side XML comparison with:
+
+- OLD and NEW XML views
+- highlighted changes
+- line numbers
+- synchronised scrolling
+- next/previous change navigation
+- option to show or hide unchanged lines
+
+The XML is pretty-printed before display so the report has consistent indentation and matching line numbers.
 
 ## Requirements
 
-Please install the packages listed in `requirements.txt`.
+Typical dependencies include:
 
-The script currently uses:
+```text
+pandas
+openpyxl
+lxml
+```
 
-- `pandas`
-- `beautifulsoup4`
-- `openpyxl`
-- `tkinter` *(usually included with standard Python installations)*
-- `os` *(standard library)*
+`tkinter` is used for selecting the OLD, NEW, and output folders.
 
----
+## Usage
 
-## How It Works
-
-The script reads CT protocol HTML content and extracts data from:
-
-- **protocol headings**
-- **acquisition labels**
-- **result labels**
-- **parameter / value tables**
-
-Each extracted row is stored with the following **identifier columns**:
-
-- `Protocol`
-- `Acquisition Number`
-- `Label`
-- `Type`
-- `Result Label`
-
-These columns are used as a **composite key** to identify matching rows when comparing two files.
-
-In **Compare mode**, the script classifies differences as:
-
-- **Removed**: present in **BEFORE** but not in **AFTER**
-- **Added**: present in **AFTER** but not in **BEFORE**
-- **Changed**: same row exists in both, but one or more parameter values differ
-
-The comparison checks the **union of parameter columns from both files**, so it can also detect **new parameter headers** introduced in the newer file.
-
----
-
-## How to Use
-
-### 1. Run the script
-
-Run:
+Run the relevant comparison script:
 
 ```bash
-python ct_protocol_summary.py
+python xml_compare.py
+```
+
+Select:
+
+1. OLD XML folder
+2. NEW XML folder
+3. Output folder
+
+The comparison report will then be generated in the selected output folder.

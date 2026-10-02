@@ -32,24 +32,24 @@ def readable_path(path):
 def canonical_number(value):
     value = clean(value)
     try:
-        number = Decimal(value)
-    except (InvalidOperation, ValueError):
+        number = Decimal(value) # converts to decimal
+    except (InvalidOperation, ValueError): # a text (not number)
         return None
-    if not number.is_finite():
+    if not number.is_finite(): # not a finite number (e.g. NaN, Infinity)
         return None
     if number == 0:
         return '0'
     result = format(number.normalize(), 'f')
     if '.' in result:
-        result = result.rstrip('0').rstrip('.')
+        result = result.rstrip('0').rstrip('.') # get rid of trailing zeros and decimal point
     return result
 
-def comparison_token(value):
+def comparison_token(value): # assign number/text tag to each value
     value = clean(value)
     number = canonical_number(value)
     if number is not None:
         return ('NUMBER', number)
-    return ('TEXT', value)
+    return ('TEXT', value) 
 
 def values_equal(a, b):
     return comparison_token(a) == comparison_token(b)
@@ -85,11 +85,8 @@ def collect_xml_files(folder):
             files[relative_path] = full_path
     return files
 
-def element_children(element):
-    return [child for child in element if isinstance(child.tag, str)]
-
 # ============================================================
-# PRETTY XML
+# XML READING
 # ============================================================
 
 def parse_pretty_xml(path):
@@ -98,7 +95,7 @@ def parse_pretty_xml(path):
 
     Original XML is not changed.
 
-    We then reparse the pretty XML so that element.sourceline
+    Then reparse the pretty XML so that element.sourceline
     corresponds to the lines displayed in the HTML report.
     """
     parser = etree.XMLParser(
@@ -109,7 +106,7 @@ def parse_pretty_xml(path):
     tree = etree.parse(path, parser)
     pretty_bytes = etree.tostring(
         tree,
-        pretty_print=True,
+        pretty_print=True, # indentations
         encoding="utf-8",
         xml_declaration=True,
     )
@@ -122,6 +119,9 @@ def parse_pretty_xml(path):
     display_root = etree.fromstring(pretty_bytes, display_parser)
     return (display_root, pretty_text)
 
+def element_children(element):
+    return [child for child in element if isinstance(child.tag, str)]
+
 # ============================================================
 # IDENTITY FACTS
 # ============================================================
@@ -132,26 +132,26 @@ def identity_facts(element):
 
     Stop before repeated same-tag collections.
     """
-    facts = {}
+    facts = {} # dict for attributes and text values, keyed by path
 
     def walk(node, prefix=''):
         for attribute, value in node.attrib.items():
             key = f'{prefix}@{attribute}' if prefix else f'@{attribute}'
             facts[key] = clean(value)
-        children = element_children(node)
-        if not children:
+        children = element_children(node) # gets all child xml elements
+        if not children: # leaf node (no children) so record the text value
             key = f'{prefix}#text' if prefix else '#text'
             facts[key] = clean(node.text)
             return
-        groups = defaultdict(list)
+        groups = defaultdict(list) # initialize a dict to group children by tag name
         for child in children:
             groups[child.tag].append(child)
-        for tag, siblings in groups.items():
+        for tag, siblings in groups.items(): # make tag = pair[0], siblings = pair[1] in the groups
             if len(siblings) > 1:
                 continue
             child = siblings[0]
-            walk(child, f'{prefix}{tag}/')
-    walk(element)
+            walk(child, f'{prefix}{tag}/') # add the tag to the prefix to go one level deeper in the xml tree
+    walk(element) # start the walk from the root element
     return facts
 
 # ============================================================
@@ -256,23 +256,23 @@ def identity_segment(tag, fields, identity):
     return segment  # e.g. Beam[Name=A]
 
 # ============================================================
-# BUILD DICTIONARIES
+# BUILD DICTIONARIES: PATH -> VALUE, PATH -> LINE
 # ============================================================
 
 def add_value(values, lines, key, value, line):
     if key in values:
         raise ValueError(f'\nDuplicate contextual path:\n\n{readable_path(key)}')
-    values[key] = clean(value)
-    lines[key] = line
+    values[key] = clean(value) # store value in dict
+    lines[key] = line # stores line number in dict
 
 def record_element(element, path, values, lines):
     if element is None:
         return
-    line = element.sourceline
+    line = element.sourceline # get line number in the pretty-printed XML, for HTML report display
     for attribute, value in element.attrib.items():
         add_value(values, lines, f'{path}/@{attribute}', value, line)
     children = element_children(element)
-    if not children:
+    if not children: # leaf node (no children) so record the text value
         add_value(values, lines, path, element.text, line)
         return
     text = clean(element.text)
